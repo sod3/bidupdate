@@ -6,11 +6,13 @@ import { AlertTriangle, Coins, Loader2, Plane, Sparkles, WalletCards } from "luc
 import { useWallet } from "@/context/WalletContext";
 import { GameCanvas } from "@/components/premium-games/GameCanvas";
 import { GameErrorBoundary } from "@/components/premium-games/GameErrorBoundary";
+import { FlightXTable, type FlightBetBay } from "@/components/premium-games/FlightXTable";
 import {
   BettingArea, BettingPanel, BettingTimer, ChipSelector, GameHeader, GameRulesModal, LoadingScreen, LossAnimation,
   ReconnectHandler, ResponsiveGameLayout, ResultHistory, SettingsPanel, WinAnimation,
 } from "@/components/premium-games/GameChrome";
 import { GameStage } from "@/components/premium-games/GameStage";
+import { RedBlackTable } from "@/components/premium-games/RedBlackTable";
 import { GameSessionManager, PremiumGameRequestError, ServerResultService, TransactionManager, type ActiveFlightRound, type CompletedPremiumRound, type PremiumGameState } from "@/lib/premium-games/client";
 import { premiumGame, type PremiumBetOption, type PremiumGameId } from "@/lib/premium-games/definitions";
 import { SoundManager, type GameSound } from "@/lib/premium-games/soundManager";
@@ -26,7 +28,7 @@ function delay(milliseconds: number) {
 function playCinematicFor(gameId: PremiumGameId, game: ReturnType<typeof premiumGame>) {
   if (gameId === "red-vs-black") return triggerGameCinematic({ kind: "versus", game: game.title.toUpperCase(), kicker: game.kicker.toUpperCase(), left: "RED KINGDOM", leftMeta: "REGENT AURELIA", right: "BLACK KINGDOM", rightMeta: "SENTINEL VARYN", accent: game.accent, accent2: game.accent2, icon: "swords", durationMs: 3300 });
   if (gameId === "dragon-tiger") return triggerGameCinematic({ kind: "versus", game: game.title.toUpperCase(), kicker: game.kicker.toUpperCase(), left: "DRAGON", leftMeta: "JADE GUARDIAN", right: "TIGER", rightMeta: "GOLD GUARDIAN", accent: game.accent, accent2: game.accent2, icon: "swords", durationMs: 3300 });
-  if (gameId === "flight-x") return triggerGameCinematic({ kind: "versus", game: game.title.toUpperCase(), kicker: "ENGINES ARMED", left: "YOU", leftMeta: "PILOT", right: "X", rightMeta: "MULTIPLIER", accent: game.accent, accent2: game.accent2, icon: "plane", durationMs: 3200 });
+  if (gameId === "flight-x") return;
   const center = game.mode === "roulette" ? "NO MORE BETS" : game.mode === "car-wheel" ? "LIGHTS OUT" : game.mode === "dice" ? "ROLL THE DICE" : game.mode === "tumble" ? "CALL THE STORM" : "SPIN THE VAULT";
   triggerGameCinematic({ kind: game.mode === "crash" ? "launch" : "start", game: game.title.toUpperCase(), kicker: game.kicker.toUpperCase(), center, accent: game.accent, accent2: game.accent2, icon: game.mode === "tumble" ? "zap" : "sparkles", durationMs: 2800 });
 }
@@ -58,6 +60,12 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const [round, setRound] = useState<CompletedPremiumRound | null>(null);
   const [activeFlight, setActiveFlight] = useState<ActiveFlightRound | null>(null);
   const [flightMultiplier, setFlightMultiplier] = useState(1);
+  const [cashoutPending, setCashoutPending] = useState(false);
+  const [flightBays, setFlightBays] = useState<[FlightBetBay, FlightBetBay]>(() => [
+    { amount: game.chips[0], autoCashout: 1.58, autoEnabled: false },
+    { amount: game.chips[0], autoCashout: 1.58, autoEnabled: false },
+  ]);
+  const [activeFlightBay, setActiveFlightBay] = useState<number | null>(null);
   const [celebrating, setCelebrating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -78,9 +86,16 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     setBalance(payload.balance);
     const firstChip = payload.setting.chipDenominations.find((chip) => chip >= payload.setting.minStake) ?? payload.setting.chipDenominations[0];
     setSelectedChip((current) => payload.setting.chipDenominations.includes(current) ? current : firstChip);
+    if (gameId === "flight-x") setFlightBays((current) => current.map((bay) => ({
+      ...bay,
+      amount: payload.setting.chipDenominations.includes(bay.amount) && bay.amount <= payload.setting.maxStake ? bay.amount : firstChip,
+    })) as [FlightBetBay, FlightBetBay]);
     if (singleAction) setBets((current) => current.size ? current : new Map([[defaultOption, firstChip]]));
     if (payload.activeRound) {
       setActiveFlight(payload.activeRound);
+      setActiveFlightBay((current) => current ?? 0);
+      setBets(new Map([[defaultOption, payload.activeRound.totalStake]]));
+      setFlightBays((current) => [{ ...current[0], amount: payload.activeRound?.totalStake ?? current[0].amount }, current[1]]);
       setBalance(payload.activeRound.balance);
       setPhase("ANIMATING");
     }
@@ -117,22 +132,19 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     return () => { mounted = false; controller.abort(); window.clearInterval(ticker); };
   }, [loadState]);
 
-  const finishFlight = useCallback(async (completed: CompletedPremiumRound, nextState?: PremiumGameState) => {
+  const finishFlight = useCallback((completed: CompletedPremiumRound, nextState?: PremiumGameState) => {
+    setCashoutPending(false);
     setActiveFlight(null);
     setFlightMultiplier(Number(completed.payload.cashedOutMultiplier ?? completed.payload.crashMultiplier ?? 1));
     setRound(completed);
     setBalance(completed.balance);
     setPhase("RESULT");
-    setCelebrating(true);
-    triggerGameCinematic({ kind: completed.result === "WIN" ? "win" : "loss", game: "FLIGHT X", kicker: completed.result === "WIN" ? "CASH OUT CONFIRMED" : "FLIGHT ENDED", center: completed.result === "WIN" ? `${Number(completed.payload.cashedOutMultiplier ?? 1).toFixed(2)}× CASH OUT` : "CRASHED", accent: game.accent, accent2: game.accent2, icon: "plane", durationMs: 2200 });
+    setCelebrating(false);
     SoundManager.play(completed.result === "WIN" ? "win" : "loss");
     if (nextState) setState(nextState);
-    else {
-      const refreshed = await loadState().catch(() => null);
-      if (refreshed) setState(refreshed);
-    }
+    else void loadState().then(setState).catch(() => null);
     void wallet.refreshWallet();
-  }, [game.accent, game.accent2, loadState, wallet]);
+  }, [loadState, wallet]);
 
   useEffect(() => {
     if (!activeFlight) return;
@@ -201,22 +213,34 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     });
   };
 
-  const runRound = async () => {
+  const runRound = async (overrideBets?: ReadonlyMap<string, number>, launchBay?: number) => {
     if (busyRef.current || phase !== "BETTING") return;
-    if (!bets.size || totalStake < limits.minStake) {
+    const roundBets = overrideBets ? new Map(overrideBets) : new Map(bets);
+    const roundStake = [...roundBets.values()].reduce((sum, amount) => sum + amount, 0);
+    if (!roundBets.size || roundStake < limits.minStake) {
       setError(`Place at least ${limits.minStake.toLocaleString()} CR before starting.`);
       return;
     }
-    if (totalStake > balance) {
+    if (roundStake > balance) {
       setError("Your balance is lower than the selected stake.");
       return;
     }
     busyRef.current = true;
     setBusy(true);
     setError(null);
-    setLastBets(new Map(bets));
+    setBets(roundBets);
+    setLastBets(roundBets);
+    if (gameId === "flight-x") setCashoutPending(false);
+    if (launchBay !== undefined) setActiveFlightBay(launchBay);
     setRound(null);
     setPhase("CLOSED");
+    if (gameId === "red-vs-black") {
+      for (let toss = 0; toss < 3; toss += 1) {
+        SoundManager.play("chip");
+        await delay(230);
+      }
+      await delay(520);
+    }
     playCinematicFor(gameId, game);
     try {
       for (let value = 5; value >= 1; value -= 1) {
@@ -225,7 +249,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
         await delay(600);
       }
       setCountdown(0);
-      const response = await ServerResultService.play(gameId, TransactionManager.requestId(gameId), TransactionManager.normalizeSelections(bets));
+      const response = await ServerResultService.play(gameId, TransactionManager.requestId(gameId), TransactionManager.normalizeSelections(roundBets));
       if (response.round.status === "PLAYING") {
         const flight = response.round as ActiveFlightRound;
         sessionClock.current.sync(flight.serverNow);
@@ -252,6 +276,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The round could not be completed.");
       setPhase("BETTING");
+      if (gameId === "flight-x") setActiveFlightBay(null);
       void loadState().catch(() => null);
     } finally {
       busyRef.current = false;
@@ -259,30 +284,64 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     }
   };
 
-  const cashOut = async () => {
+  const cashOut = useCallback(async () => {
     if (!activeFlight || busyRef.current) return;
+    const flight = activeFlight;
     busyRef.current = true;
     setBusy(true);
+    setCashoutPending(true);
+    setActiveFlight(null);
     setError(null);
+    SoundManager.play("cashout");
     try {
-      const response = await ServerResultService.cashout("flight-x", activeFlight.roundId);
-      SoundManager.play("cashout");
-      await finishFlight(response.round);
+      const response = await ServerResultService.cashout("flight-x", flight.roundId);
+      finishFlight(response.round);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Cash out could not be completed.");
-      void loadState().catch(() => null);
+      setCashoutPending(false);
+      const refreshed = await loadState().catch(() => null);
+      if (refreshed?.latestRound?.roundId === flight.roundId) finishFlight(refreshed.latestRound, refreshed);
+      else setError(caught instanceof Error ? caught.message : "Cash out could not be completed.");
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
-  };
+  }, [activeFlight, finishFlight, loadState]);
+
+  useEffect(() => {
+    if (!activeFlight || activeFlightBay === null) return;
+    const bay = flightBays[activeFlightBay];
+    if (bay?.autoEnabled && flightMultiplier >= bay.autoCashout && !busyRef.current) void cashOut();
+  }, [activeFlight, activeFlightBay, cashOut, flightBays, flightMultiplier]);
 
   const continueRound = () => {
     setCelebrating(false);
     setRound(null);
     setPhase("BETTING");
     setCountdown(0);
+    if (gameId === "flight-x") {
+      setActiveFlightBay(null);
+      setCashoutPending(false);
+    }
     if (!singleAction) setBets(new Map());
+  };
+
+  useEffect(() => {
+    if (gameId !== "flight-x" || phase !== "RESULT") return;
+    const timer = window.setTimeout(() => {
+      setRound(null);
+      setPhase("BETTING");
+      setCountdown(0);
+      setActiveFlightBay(null);
+      setCashoutPending(false);
+    }, 2600);
+    return () => window.clearTimeout(timer);
+  }, [gameId, phase]);
+
+  const launchFlightBay = (index: number) => {
+    const bay = flightBays[index];
+    if (!bay) return;
+    const flightBet = new Map([[defaultOption, bay.amount]]);
+    void runRound(flightBet, index);
   };
 
   const repeat = () => {
@@ -316,6 +375,74 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const stageActive = phase === "ANIMATING";
   const resultRevealed = phase === "RESULT";
   const actionLabel = game.mode === "tumble" || game.mode === "reels" ? "SPIN" : game.mode === "crash" ? "LAUNCH FLIGHT" : "LOCK BETS & PLAY";
+
+  if (gameId === "flight-x") return <GameErrorBoundary><ResponsiveGameLayout>
+    <FlightXTable
+      game={game}
+      sessionId={state.sessionId}
+      balance={balance}
+      history={state.history ?? []}
+      phase={phase}
+      countdown={countdown}
+      round={round}
+      active={stageActive}
+      multiplier={flightMultiplier}
+      bays={flightBays}
+      activeBay={activeFlightBay}
+      chips={limits.chipDenominations}
+      maxStake={limits.maxStake}
+      busy={busy}
+      cashoutPending={cashoutPending}
+      muted={muted}
+      onToggleMuted={() => setMuted(!muted)}
+      onRules={() => setRulesOpen(true)}
+      onHistory={() => setHistoryOpen(true)}
+      onBaysChange={setFlightBays}
+      onLaunch={launchFlightBay}
+      onCashout={() => void cashOut()}
+    />
+    {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}
+    {rulesOpen && <GameRulesModal game={game} close={() => setRulesOpen(false)} />}
+    {historyOpen && <ResultHistory items={state.history ?? []} close={() => setHistoryOpen(false)} />}
+    <ReconnectHandler onReconnect={reconnect} />
+  </ResponsiveGameLayout></GameErrorBoundary>;
+
+  if (gameId === "red-vs-black") return <GameErrorBoundary><ResponsiveGameLayout>
+    <RedBlackTable
+      game={game}
+      artwork={state.setting.artwork || game.thumbnail}
+      balance={balance}
+      stake={totalStake}
+      possibleReturn={possibleReturn}
+      history={state.history ?? []}
+      phase={phase}
+      countdown={countdown}
+      round={round}
+      active={stageActive}
+      revealed={resultRevealed}
+      bets={bets}
+      selectedChip={selectedChip}
+      chips={limits.chipDenominations}
+      disabled={controlsDisabled}
+      busy={busy}
+      minStake={limits.minStake}
+      muted={muted}
+      onToggleMuted={() => setMuted(!muted)}
+      onRules={() => setRulesOpen(true)}
+      onHistory={() => setHistoryOpen(true)}
+      onSelect={selectOption}
+      onChooseChip={chooseChip}
+      onClear={() => setBets(new Map())}
+      onRepeat={repeat}
+      onDouble={double}
+      onPlay={() => void runRound()}
+    />
+    {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}
+    {celebrating && round && (round.result === "WIN" ? <WinAnimation round={round} skip={continueRound} /> : <LossAnimation round={round} skip={continueRound} />)}
+    {rulesOpen && <GameRulesModal game={game} close={() => setRulesOpen(false)} />}
+    {historyOpen && <ResultHistory items={state.history ?? []} close={() => setHistoryOpen(false)} />}
+    <ReconnectHandler onReconnect={reconnect} />
+  </ResponsiveGameLayout></GameErrorBoundary>;
 
   return <GameErrorBoundary><ResponsiveGameLayout><main className={`premium-game-shell game-${game.mode} phase-${phase.toLocaleLowerCase()}`} style={{ "--game-accent": game.accent, "--game-accent-2": game.accent2, "--game-art": `url(${state?.setting.artwork || game.thumbnail})` } as React.CSSProperties}>
     <div className="premium-game-art" />

@@ -340,11 +340,15 @@ export async function startFlightRound(input: { userId: string; requestId: strin
 
 export async function settleFlightRound(userId: string, roundId: string, cashout: boolean) {
   const gameId = "flight-x" as const;
+  // A cash-out is judged at server request arrival, not after wallet/database
+  // work completes. This prevents transaction latency from turning an on-time
+  // click into a crash while keeping the timestamp fully server-controlled.
+  const cashoutRequestedAt = Date.now();
   const round = await GameRound.findOne({ userId, gameId, roundId }).select("+rngSeed +crashMultiplier").lean();
   if (!round) throw new ApiError("Flight round not found.", 404, "ROUND_NOT_FOUND");
   if (round.status !== "PLAYING") return serializeCompletedRound(round as unknown as Record<string, unknown>);
 
-  const elapsed = Date.now() - new Date(round.startedAt).getTime();
+  const elapsed = (cashout ? cashoutRequestedAt : Date.now()) - new Date(round.startedAt).getTime();
   const current = flightMultiplierAt(elapsed);
   const crashMultiplier = Number(round.crashMultiplier);
   const crashed = elapsed >= flightElapsedFor(crashMultiplier) || current >= crashMultiplier;
@@ -355,7 +359,7 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
   await database.connection.transaction(async (session) => {
     const live = await GameRound.findOne({ userId, gameId, roundId, status: "PLAYING" }).select("+rngSeed +crashMultiplier").session(session).lean();
     if (!live) return;
-    const liveElapsed = Date.now() - new Date(live.startedAt).getTime();
+    const liveElapsed = (cashout ? cashoutRequestedAt : Date.now()) - new Date(live.startedAt).getTime();
     const liveCurrent = flightMultiplierAt(liveElapsed);
     const liveCrash = Number(live.crashMultiplier);
     const liveCrashed = liveElapsed >= flightElapsedFor(liveCrash) || liveCurrent >= liveCrash;

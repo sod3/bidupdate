@@ -64,7 +64,16 @@ function SicBoStage({ round, active, revealed }: { round: CompletedPremiumRound 
 function RedBlackStage({ round, active, revealed }: { round: CompletedPremiumRound | null; active: boolean; revealed: boolean }) {
   const red = payloadArray<CardValue>(round, "red");
   const black = payloadArray<CardValue>(round, "black");
-  return <div className={`premium-card-duel-stage ${active ? "dealing" : ""}`}><div className="premium-kingdom red"><small>RED KINGDOM</small><b>REGENT AURELIA</b><span>{revealed ? String(round?.payload?.redHand) : "AWAITING HAND"}</span></div><div className="premium-duel-cards"><div>{[0, 1, 2].map((index) => <GameCardFace key={`r${index}`} card={red[index]} reveal={revealed} />)}</div><i>VS</i><div>{[0, 1, 2].map((index) => <GameCardFace key={`b${index}`} card={black[index]} reveal={revealed} />)}</div></div><div className="premium-kingdom black"><small>BLACK KINGDOM</small><b>SENTINEL VARYN</b><span>{revealed ? String(round?.payload?.blackHand) : "AWAITING HAND"}</span></div></div>;
+  return <div className={`premium-card-duel-stage ${active ? "dealing" : ""}`}>
+    <div className="premium-kingdom black"><i>♠</i><small>BLACK HOUSE</small><b>SENTINEL VARYN</b><span>{revealed ? String(round?.payload?.blackHand) : active ? "HAND IN PLAY" : "AWAITING HAND"}</span></div>
+    <div className="premium-duel-cards">
+      <div className="black-hand">{[0, 1, 2].map((index) => <GameCardFace key={`b${index}`} card={black[index]} reveal={revealed} />)}</div>
+      <i><small>ROYAL</small>VS</i>
+      <div className="red-hand">{[0, 1, 2].map((index) => <GameCardFace key={`r${index}`} card={red[index]} reveal={revealed} />)}</div>
+    </div>
+    <div className="premium-kingdom red"><i>♥</i><small>RED HOUSE</small><b>REGENT AURELIA</b><span>{revealed ? String(round?.payload?.redHand) : active ? "HAND IN PLAY" : "AWAITING HAND"}</span></div>
+    {revealed && round && <div className="rb-duel-result" data-winner={String(round.payload.winner ?? "TIE")}>{round.label}</div>}
+  </div>;
 }
 
 function DragonTigerStage({ round, active, revealed }: { round: CompletedPremiumRound | null; active: boolean; revealed: boolean }) {
