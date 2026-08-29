@@ -35,7 +35,7 @@ type Session = {
   error?: string;
 };
 type Opponent = { id: string; username: string; level: number; rank: string; winStreak: number; isBot?: boolean };
-type MatchFound = { matchId: string; startAt: number; environmentSeed: number; opponent: Opponent; firstStrikerId: string; tierId: string };
+type MatchFound = { matchId: string; startAt: number; environmentSeed: number; opponent: Opponent; firstStrikerId: string; tierId: string; aiFavored: boolean };
 type TurnPacket = {
   turn: number; strikerId: string; keeperId: string; shotNumber: number; suddenDeath: boolean; deadlineAt: number;
   pressureText: "MATCH POINT" | "MUST SCORE" | "SAVE TO WIN" | "SUDDEN DEATH" | "";
@@ -103,7 +103,7 @@ function resolveTraining(turn: number, strikerId: string, keeperId: string, shot
   return { turn, strikerId, keeperId, goal, outcome: goal ? "GOAL" : saved ? "SAVE" : "MISS", shotType, targetX, targetY, keeperZone, perfect, scores: {}, histories: {} };
 }
 
-function advancedKeeperZone(shot: ShotInput): KeeperZone {
+function advancedKeeperZone(shot: ShotInput, favored = true): KeeperZone {
   const timingOffset = (shot.timing - .5) * 1.05 * (.35 + shot.power);
   const targetX = shot.directionX * 3.35 + shot.curve * .5 * shot.power + timingOffset;
   const targetY = .12 + shot.height * 2.35 + Math.abs(shot.timing - .5) * .28;
@@ -114,12 +114,21 @@ function advancedKeeperZone(shot: ShotInput): KeeperZone {
   ];
   const best = [...zones].sort((left, right) =>
     Math.hypot(targetX - left.x, targetY - left.y) - Math.hypot(targetX - right.x, targetY - right.y))[0].zone;
-  if (Math.random() < .9) return best;
+  if (Math.random() < (favored ? .96 : .28)) return best;
   const alternatives = zones.filter((candidate) => candidate.zone !== best);
   return alternatives[Math.floor(Math.random() * alternatives.length)].zone;
 }
 
-function advancedBotShot(): ShotInput {
+function advancedBotShot(favored = true): ShotInput {
+  if (!favored) {
+    return {
+      directionX: (Math.random() - .5) * .18,
+      height: .3 + Math.random() * .12,
+      power: .58 + Math.random() * .08,
+      curve: (Math.random() - .5) * .08,
+      timing: .5 + (Math.random() - .5) * .08,
+    };
+  }
   const shots: ShotInput[] = [
     { directionX: -.76, height: .3, power: .88, curve: -.12, timing: .5 },
     { directionX: .76, height: .76, power: .84, curve: .12, timing: .5 },
@@ -290,7 +299,7 @@ export function PenaltyKingsExperience() {
     const practiceOpponent: Opponent = { id: "practice-rival", username: fictionalOpponentNameAt(Math.floor(Math.random() * FICTIONAL_OPPONENT_NAMES.length), [opponent?.username ?? ""]), level: 32, rank: "Diamond I", winStreak: 7, isBot: true };
     const startAt = Date.now() + 3_800;
     setSession(practiceSession); setOpponent(practiceOpponent);
-    setMatch({ matchId: "training", startAt, environmentSeed: 27, opponent: practiceOpponent, firstStrikerId: practiceSession.playerId, tierId });
+    setMatch({ matchId: "training", startAt, environmentSeed: 27, opponent: practiceOpponent, firstStrikerId: practiceSession.playerId, tierId, aiFavored: true });
     trainingState.current = { scores: { [practiceSession.playerId]: 0, [practiceOpponent.id]: 0 }, histories: { [practiceSession.playerId]: [], [practiceOpponent.id]: [] }, turn: 0, suddenDeath: false, playerGoals: 0, playerSaves: 0, perfectShots: 0 };
     setMode("training"); setResult(null); setResolution(null); setPhase("versus");
     triggerGameCinematic({ kind: "versus", game: "PENALTY KINGS", kicker: "PRACTICE SHOWDOWN", left: practiceSession.username, leftMeta: practiceSession.rank, right: practiceOpponent.username, rightMeta: practiceOpponent.rank, accent: "#6ee7b7", accent2: "#fb7185", icon: "goal", durationMs: 3300 });
@@ -335,14 +344,14 @@ export function PenaltyKingsExperience() {
   const submitShot = useCallback((shot: ShotInput) => {
     if (!turn || submitted || turn.strikerId !== playerId) return;
     setSubmitted(true); playCue("kick"); HapticManager.pulse("impact");
-    applyTrainingResolution(resolveTraining(turn.turn, turn.strikerId, turn.keeperId, shot, advancedKeeperZone(shot)));
-  }, [applyTrainingResolution, playCue, playerId, submitted, turn]);
+    applyTrainingResolution(resolveTraining(turn.turn, turn.strikerId, turn.keeperId, shot, advancedKeeperZone(shot, match?.aiFavored !== false)));
+  }, [applyTrainingResolution, match?.aiFavored, playCue, playerId, submitted, turn]);
 
   const submitSave = useCallback((zone: KeeperZone) => {
     if (!turn || submitted || turn.keeperId !== playerId) return;
     setSubmitted(true); HapticManager.pulse("tap");
-    applyTrainingResolution(resolveTraining(turn.turn, turn.strikerId, turn.keeperId, advancedBotShot(), zone));
-  }, [applyTrainingResolution, playerId, submitted, turn]);
+    applyTrainingResolution(resolveTraining(turn.turn, turn.strikerId, turn.keeperId, advancedBotShot(match?.aiFavored !== false), zone));
+  }, [applyTrainingResolution, match?.aiFavored, playerId, submitted, turn]);
 
   const rematch = () => {
     if (mode === "training") { setPhase("landing"); window.setTimeout(startTraining, 120); return; }

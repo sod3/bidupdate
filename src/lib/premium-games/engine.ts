@@ -1,4 +1,5 @@
 import { premiumGame, type PremiumGameId } from "@/lib/premium-games/definitions";
+import { VERY_HARD_DIFFICULTY_VERSION, VERY_HARD_PLAYER_TARGET_WIN_PERCENT } from "@/lib/gameDifficulty";
 import { RNGService } from "@/lib/premium-games/rngService";
 
 export interface RoundSelection {
@@ -20,6 +21,8 @@ const moneySymbols = ["CASH", "DIAMOND", "CROWN", "SEVEN", "GOLD", "COIN", "VAUL
 const thunderSymbols = ["CROWN", "CRYSTAL", "GOBLET", "RING", "RUNE", "PHOENIX", "SHIELD", "DIAMOND", "COIN"] as const;
 const suits = ["♠", "♥", "♦", "♣"] as const;
 const rankLabels = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"] as const;
+const PREMIUM_OUTCOME_SEARCH_LIMIT = 512;
+export const PREMIUM_TARGET_WIN_PERCENT = VERY_HARD_PLAYER_TARGET_WIN_PERCENT;
 
 function credits(value: number) {
   return Math.max(0, Math.round((value + Number.EPSILON) * 100) / 100);
@@ -217,7 +220,7 @@ function moneyMachine(rng: RNGService, selections: readonly RoundSelection[]) {
   };
 }
 
-export function createPremiumOutcome(gameId: PremiumGameId, seed: string, selections: readonly RoundSelection[]) {
+function createNaturalPremiumOutcome(gameId: PremiumGameId, seed: string, selections: readonly RoundSelection[]) {
   const rng = new RNGService(seed);
   switch (gameId) {
     case "royal-roulette": return roulette(rng, selections);
@@ -231,9 +234,46 @@ export function createPremiumOutcome(gameId: PremiumGameId, seed: string, select
   }
 }
 
+function withVeryHardMetadata(outcome: PremiumRoundOutcome, requestedResult: "WIN" | "LOSS") {
+  return {
+    ...outcome,
+    payload: {
+      ...outcome.payload,
+      difficulty: {
+        version: VERY_HARD_DIFFICULTY_VERSION,
+        targetWinPercent: PREMIUM_TARGET_WIN_PERCENT,
+        requestedResult,
+      },
+    },
+  };
+}
+
+/**
+ * Resolves a deterministic Very Hard round. A committed difficulty roll asks
+ * for a winning result 10% of the time and a losing result 90% of the time.
+ * Candidate outcomes are still produced by each game's normal rules; selecting
+ * every possible outcome can therefore fall back to the closest valid result.
+ */
+export function createPremiumOutcome(gameId: PremiumGameId, seed: string, selections: readonly RoundSelection[]) {
+  if (gameId === "flight-x") throw new Error("Flight X uses its committed live-round flow.");
+  const targetWin = new RNGService(`${seed}:${VERY_HARD_DIFFICULTY_VERSION}:target`).int(100) < PREMIUM_TARGET_WIN_PERCENT;
+  const requestedResult = targetWin ? "WIN" as const : "LOSS" as const;
+  let closest: PremiumRoundOutcome | null = null;
+
+  for (let index = 0; index < PREMIUM_OUTCOME_SEARCH_LIMIT; index += 1) {
+    const candidate = createNaturalPremiumOutcome(gameId, `${seed}:${VERY_HARD_DIFFICULTY_VERSION}:candidate:${index}`, selections);
+    if (candidate.result === requestedResult) return withVeryHardMetadata(candidate, requestedResult);
+    if (!closest || (targetWin ? candidate.payout > closest.payout : candidate.payout < closest.payout)) closest = candidate;
+  }
+
+  if (!closest) throw new Error("A premium game outcome could not be generated.");
+  return withVeryHardMetadata(closest, requestedResult);
+}
+
 export function createFlightCrash(seed: string) {
   const rng = new RNGService(seed);
-  const multiplier = Math.min(100, Math.max(1, Math.floor((0.97 / (1 - rng.float())) * 100) / 100));
+  const survivalFactor = VERY_HARD_PLAYER_TARGET_WIN_PERCENT / 100;
+  const multiplier = Math.min(100, Math.max(1, Math.floor((survivalFactor / (1 - rng.float())) * 100) / 100));
   return credits(multiplier);
 }
 
@@ -252,4 +292,3 @@ export function validateSelections(gameId: PremiumGameId, selections: readonly R
   const stake = totalStake(selections);
   return stake >= game.minStake && stake <= game.maxStake;
 }
-

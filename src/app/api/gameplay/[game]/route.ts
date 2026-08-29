@@ -13,6 +13,7 @@ import { POST as persistPool } from "@/app/api/eight-ball/match/route";
 import { POST as persistPenalty } from "@/app/api/penalty-kings/match/route";
 import { ensurePlatformData } from "@/services/bootstrapService";
 import { FICTIONAL_OPPONENT_NAMES, fictionalOpponentNameAt } from "@/lib/opponentNames";
+import { isVeryHardOpponentFavoredRoll } from "@/lib/gameDifficulty";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,7 +47,7 @@ function freshOpponentName(body: Record<string, unknown>, username: string) {
 }
 
 function hardCpuFavored() {
-  return randomInt(100) < 90;
+  return isVeryHardOpponentFavoredRoll(randomInt(100));
 }
 
 function secret() {
@@ -111,10 +112,11 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
         const matchId = randomUUID();
         const startAt = Date.now() + 4_200;
         const environmentSeed = randomInt(1, 2_147_483_647);
-        const aiTargetTimeMs = hardRaceTargets[tierId] + randomInt(-650, 651);
+        const aiFavored = hardCpuFavored();
+        const aiTargetTimeMs = (aiFavored ? hardRaceTargets : raceTargets)[tierId] + randomInt(-650, 651);
         await persist(request, "/api/neon-drift/match", persistRace, { phase: "START", matchId, tierId, environmentSeed, startAt, players: [human, bot] });
         await RaceMatch.updateOne({ matchId }, { $set: { aiOpponent: bot, aiTargetTimeMs } });
-        return noStoreJson({ match: { matchId, startAt, environmentSeed, opponent: bot, aiTargetTimeMs } });
+        return noStoreJson({ match: { matchId, startAt, environmentSeed, opponent: bot, aiTargetTimeMs, aiFavored } });
       }
       const matchId = String(body.matchId || "");
       const match = await RaceMatch.findOne({ matchId }).lean();
@@ -199,9 +201,9 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
       const tierId = String(body.tierId || "") as keyof typeof penaltyTiers; if (!penaltyTiers[tierId]) throw new ApiError("Select a valid penalty tier.", 400, "INVALID_TIER");
       const profile = await PenaltyProfile.findOneAndUpdate({ userId: user.userId }, { $setOnInsert: { userId: user.userId } }, { upsert: true, new: true }).lean();
       const bot = { id: `penalty-ai-${randomUUID()}`, username: freshOpponentName(body, user.username), ...profileIdentity(profile), level: Math.max(27, profile.level + randomInt(8, 16)), isBot: true };
-      const matchId = randomUUID(); const startAt = Date.now() + 4_000; const environmentSeed = randomInt(1, 2_147_483_647);
-      await persist(request, "/api/penalty-kings/match", persistPenalty, { phase: "START", matchId, tierId, startAt, environmentSeed, players: [{ id: user.userId, username: user.username }, bot] });
-      return noStoreJson({ match: { matchId, tierId, startAt, environmentSeed, opponent: bot, firstStrikerId: user.userId } });
+      const matchId = randomUUID(); const startAt = Date.now() + 4_000; const environmentSeed = randomInt(1, 2_147_483_647); const aiFavored = hardCpuFavored();
+      await persist(request, "/api/penalty-kings/match", persistPenalty, { phase: "START", matchId, tierId, startAt, environmentSeed, aiFavored, players: [{ id: user.userId, username: user.username }, bot] });
+      return noStoreJson({ match: { matchId, tierId, startAt, environmentSeed, opponent: bot, firstStrikerId: user.userId, aiFavored } });
     }
     const match = await PenaltyMatch.findOne({ matchId: String(body.matchId || "") }).lean();
     if (!match || !owns(match.playerIds, user.userId)) throw new ApiError("Penalty match not found.", 404, "MATCH_NOT_FOUND");

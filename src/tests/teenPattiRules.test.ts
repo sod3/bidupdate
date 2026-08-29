@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   applyTeenPattiAction,
+  arrangeTeenPattiHandsForDifficulty,
   callAmount,
   createTeenPattiRound,
   dealTeenPattiHands,
   raiseAmount,
   selectTeenPattiAiNames,
+  TEEN_PATTI_TARGET_WIN_PERCENT,
 } from "@/lib/teen-patti/engine";
 import {
   compareTeenPattiHands,
@@ -119,6 +121,28 @@ describe("Teen Patti server game engine", () => {
     }
     expect(humanWins).toBeGreaterThan(samples * 0.15);
     expect(humanWins).toBeLessThan(samples * 0.35);
+  });
+
+  it("uses a 10% strongest-hand path for the human seat in Very Hard rounds", () => {
+    expect(TEEN_PATTI_TARGET_WIN_PERCENT).toBe(10);
+    let strongestHumanRounds = 0;
+    const samples = 1_000;
+    for (let seed = 1; seed <= samples; seed += 1) {
+      const round = createTeenPattiRound({ roundId: `round-${seed}`, username: "Player", stake: 50, randomIndex: seededRandom(seed) });
+      const human = round.players[0];
+      if (round.players.slice(1).every((player) => compareTeenPattiHands(human.cards, player.cards) > 0)) strongestHumanRounds += 1;
+    }
+    expect(strongestHumanRounds / samples).toBeGreaterThan(0.07);
+    expect(strongestHumanRounds / samples).toBeLessThan(0.13);
+  });
+
+  it("assigns the weakest or strongest hand without changing the cards", () => {
+    const dealt = dealTeenPattiHands(seededRandom(29));
+    const hard = arrangeTeenPattiHandsForDifficulty(dealt, true);
+    const rarePlayerFavored = arrangeTeenPattiHandsForDifficulty(dealt, false);
+    expect(hard.slice(1).every((hand) => compareTeenPattiHands(hard[0], hand) < 0)).toBe(true);
+    expect(rarePlayerFavored.slice(1).every((hand) => compareTeenPattiHands(rarePlayerFavored[0], hand) > 0)).toBe(true);
+    expect(new Set(hard.flat().map((item) => `${item.rank}${item.suit}`))).toEqual(new Set(dealt.flat().map((item) => `${item.rank}${item.suit}`)));
   });
 
   it("charges blind and seen chaal/raise amounts from server state", () => {

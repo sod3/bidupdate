@@ -439,7 +439,7 @@ async function createPenaltyMatch(io, first, second, tierId) {
     histories: new Map(players.map((player) => [player.id, []])), turn: 0, suddenDeath: false, pending: null, finalized: false, turnTimer: null, nextTimer: null, rematchRequests: new Set(),
     aiFavored: Boolean(players.find((player) => player.isBot)?.aiFavored),
   };
-  await persistPenalty({ phase: "START", matchId: match.id, tierId, environmentSeed: match.environmentSeed, startAt: match.startAt, players: players.map(({ id, username, isBot }) => ({ id, username, isBot: Boolean(isBot) })) });
+  await persistPenalty({ phase: "START", matchId: match.id, tierId, environmentSeed: match.environmentSeed, startAt: match.startAt, aiFavored: match.aiFavored, players: players.map(({ id, username, isBot }) => ({ id, username, isBot: Boolean(isBot) })) });
   penaltyMatches.set(match.id, match);
   for (const player of players) {
     if (player.isBot) continue;
@@ -449,7 +449,7 @@ async function createPenaltyMatch(io, first, second, tierId) {
   for (const player of players) {
     if (player.isBot) continue;
     const opponent = players.find((candidate) => candidate.id !== player.id);
-    player.socket.emit("penalty:match-found", { matchId: match.id, startAt: match.startAt, environmentSeed: match.environmentSeed, opponent: penaltyOpponent(opponent), firstStrikerId: match.order[0], tierId });
+    player.socket.emit("penalty:match-found", { matchId: match.id, startAt: match.startAt, environmentSeed: match.environmentSeed, opponent: penaltyOpponent(opponent), firstStrikerId: match.order[0], tierId, aiFavored: match.aiFavored });
   }
   match.nextTimer = setTimeout(() => beginPenaltyTurn(io, match), Math.max(0, match.startAt - Date.now()));
   match.nextTimer.unref();

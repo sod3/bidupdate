@@ -1,7 +1,9 @@
 import { compareTeenPattiHands, createDeck, evaluateTeenPattiHand, type TeenPattiCard } from "@/lib/teen-patti/rules";
+import { VERY_HARD_PLAYER_TARGET_WIN_PERCENT, isVeryHardOpponentFavoredRoll } from "@/lib/gameDifficulty";
 
 export const TEEN_PATTI_STAKES = [50, 100, 250, 500] as const;
 export const HUMAN_PLAYER_ID = "PLAYER";
+export const TEEN_PATTI_TARGET_WIN_PERCENT = VERY_HARD_PLAYER_TARGET_WIN_PERCENT;
 
 export type TeenPattiStake = (typeof TEEN_PATTI_STAKES)[number];
 export type TeenPattiAction = "SEEN" | "CHAAL" | "RAISE" | "PACK" | "SHOW";
@@ -47,6 +49,7 @@ export interface TeenPattiRoundState {
   turnPlayerId: string;
   actionCount: number;
   playerBetTurns: number;
+  aiFavored: boolean;
   players: TeenPattiPlayerState[];
   actionHistory: TeenPattiActionEvent[];
   lastActionBatch: TeenPattiActionEvent[];
@@ -76,6 +79,14 @@ export function dealTeenPattiHands(randomIndex: RandomIndex) {
   return [0, 1, 2, 3].map((playerIndex) => deck.slice(playerIndex * 3, playerIndex * 3 + 3));
 }
 
+export function arrangeTeenPattiHandsForDifficulty(hands: TeenPattiCard[][], aiFavored: boolean) {
+  if (hands.length !== 4 || hands.some((hand) => hand.length !== 3)) throw new Error("Teen Patti difficulty requires four complete hands.");
+  const ranked = [...hands].sort((left, right) => compareTeenPattiHands(left, right));
+  const humanHand = aiFavored ? ranked.shift() : ranked.pop();
+  if (!humanHand) throw new Error("Teen Patti could not assign the human hand.");
+  return [humanHand, ...ranked];
+}
+
 export function selectTeenPattiAiNames(randomIndex: RandomIndex, previousNames: readonly string[] = []) {
   const previous = new Set(previousNames.map((name) => name.toLocaleUpperCase()));
   const fresh = TEEN_PATTI_AI_NAMES.filter((name) => !previous.has(name));
@@ -95,7 +106,9 @@ export function createTeenPattiRound(input: {
   previousAiNames?: readonly string[];
   now?: Date;
 }): TeenPattiRoundState {
-  const hands = dealTeenPattiHands(input.randomIndex);
+  const dealtHands = dealTeenPattiHands(input.randomIndex);
+  const aiFavored = isVeryHardOpponentFavoredRoll(input.randomIndex(100));
+  const hands = arrangeTeenPattiHandsForDifficulty(dealtHands, aiFavored);
   const aiNames = selectTeenPattiAiNames(input.randomIndex, input.previousAiNames);
   const players: TeenPattiPlayerState[] = [
     { id: HUMAN_PLAYER_ID, name: input.username, isHuman: true, cards: hands[0], seen: false, folded: false, contribution: input.stake, lastAction: "Boot" },
@@ -113,6 +126,7 @@ export function createTeenPattiRound(input: {
     turnPlayerId: HUMAN_PLAYER_ID,
     actionCount: 0,
     playerBetTurns: 0,
+    aiFavored,
     players,
     actionHistory: [],
     lastActionBatch: [],

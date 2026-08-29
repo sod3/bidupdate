@@ -3544,3 +3544,555 @@ select {
   .rb-ref-message { bottom: calc(62px + env(safe-area-inset-bottom)); }
   .rb-reference .rb-coin-flight-layer { bottom: calc(62px + env(safe-area-inset-bottom)); }
 }
+
+/* Red vs Black — reference-inspired casino control rail. The footer reads as
+   one continuous player/chip/action flow instead of a collection of panels. */
+.rb-reference .rb-controls {
+  background:
+    linear-gradient(180deg,rgba(54,43,44,.94) 0,rgba(17,16,23,.98) 9%,#08080d 54%,#030307 100%);
+  border-top: 1px solid #7d6638;
+  box-shadow: 0 -9px 24px rgba(0,0,0,.72),inset 0 2px rgba(255,229,151,.05),inset 0 -1px rgba(255,255,255,.04);
+  gap: clamp(5px,.72vw,11px);
+  grid-template-columns: minmax(150px,.85fr) minmax(340px,2.35fr) auto clamp(54px,5vw,76px) minmax(112px,.62fr) minmax(72px,.4fr);
+  height: calc(clamp(80px,12.4vh,96px) + env(safe-area-inset-bottom));
+  isolation: isolate;
+  overflow: visible;
+  padding: 11px max(12px,env(safe-area-inset-right)) max(4px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+}
+.rb-reference .rb-controls::before {
+  background: linear-gradient(90deg,transparent,#8b622a 8%,#f1d17d 27%,#725020 50%,#f1d17d 73%,#8b622a 92%,transparent);
+  box-shadow: 0 1px #120c05,0 -1px rgba(255,235,165,.17);
+  height: 2px;
+  inset: 0 5% auto;
+  z-index: 0;
+}
+.rb-reference .rb-controls::after {
+  background: linear-gradient(180deg,#8e672d,#35200b 52%,#100a05);
+  border: 1px solid #c89948;
+  box-shadow: inset 0 1px rgba(255,238,173,.32),0 3px 7px #000;
+  clip-path: polygon(12% 0,88% 0,100% 100%,0 100%);
+  content: "";
+  height: 8px;
+  left: 50%;
+  position: absolute;
+  top: -8px;
+  transform: translateX(-50%);
+  width: clamp(96px,14vw,220px);
+  z-index: 0;
+}
+.rb-reference .rb-controls > * { min-width: 0; position: relative; z-index: 1; }
+
+.rb-reference .rb-local-player {
+  align-self: stretch;
+  background: linear-gradient(90deg,rgba(34,31,36,.96),rgba(11,11,16,.78));
+  border: 1px solid rgba(226,191,108,.16);
+  border-left-color: #aa7d37;
+  border-radius: 3px 14px 14px 3px;
+  box-shadow: inset 0 1px rgba(255,255,255,.04),5px 0 15px rgba(0,0,0,.3);
+  gap: clamp(7px,.75vw,12px);
+  height: 100%;
+  padding: 2px 10px 2px 3px;
+}
+.rb-reference .rb-local-avatar {
+  align-self: stretch;
+  background-image: linear-gradient(rgba(47,5,18,.08),rgba(5,5,10,.12)),url('/images/red-black/table-players.png');
+  background-position: center,66.666% 0;
+  background-repeat: no-repeat;
+  background-size: cover,400% 200%;
+  border: 1px solid #c99c4c;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 2px rgba(16,8,8,.65),2px 0 7px #000;
+  flex: 0 0 clamp(48px,4.4vw,67px);
+  height: 100%;
+  max-height: 72px;
+  overflow: visible;
+  position: relative;
+  width: clamp(48px,4.4vw,67px);
+}
+.rb-reference .rb-local-avatar > span {
+  background: linear-gradient(180deg,#fff2a0,#bd7619);
+  border: 1px solid #fff0a1;
+  border-radius: 999px;
+  bottom: -3px;
+  color: #3d1d03;
+  display: block;
+  font-size: clamp(4px,.4vw,6px);
+  font-weight: 1000;
+  letter-spacing: .08em;
+  padding: 2px 4px;
+  position: absolute;
+  right: -5px;
+}
+.rb-reference .rb-local-player > span { align-items: flex-start; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.rb-reference .rb-local-player > span > b { color: #fff4dc; font-size: clamp(7px,.8vw,12px); letter-spacing: .025em; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+.rb-reference .rb-local-player > span > small { align-items: center; color: #f4c832; display: flex; font-size: clamp(6px,.7vw,10px); font-weight: 900; gap: 4px; margin-top: 6px; white-space: nowrap; }
+.rb-reference .rb-local-player > span > small svg { height: 1.15em; width: 1.15em; }
+
+.rb-reference .rb-chip-deck { align-items: stretch; align-self: stretch; display: flex; flex-direction: column; justify-content: center; overflow: visible; }
+.rb-reference .rb-chip-deck > small { color: rgba(255,235,187,.45); font-size: clamp(4px,.38vw,6px); letter-spacing: .18em; margin: 0 0 -2px 8px; position: relative; z-index: 2; }
+.rb-reference .rb-chip-deck .premium-chip-selector { align-items: center; flex: 1; gap: clamp(4px,.72vw,11px); justify-content: center; overflow: visible; padding: 3px 6px 0; }
+.rb-reference .rb-chip-deck .premium-chip-selector button {
+  border-width: 2px;
+  flex-basis: clamp(48px,4.15vw,66px);
+  max-width: clamp(48px,4.15vw,66px);
+  min-width: clamp(48px,4.15vw,66px);
+  box-shadow: inset 0 0 0 4px hsl(var(--chip-hue) 62% 28%),inset 0 0 0 6px rgba(255,255,255,.28),0 6px 10px #000,0 0 8px rgba(255,218,119,.13);
+}
+.rb-reference .rb-chip-deck .premium-chip-selector button span { font-family: Arial,sans-serif; font-size: clamp(7px,.8vw,12px); inset: 20%; }
+.rb-reference .rb-chip-deck .premium-chip-selector button.selected { transform: translateY(-5px) scale(1.08); }
+
+.rb-reference .rb-bet-tools { align-items: center; display: flex; gap: 4px; }
+.rb-reference .rb-bet-tools button {
+  background: linear-gradient(180deg,#464148,#17161c 63%,#08080c);
+  border: 1px solid #8e857d;
+  border-radius: 7px;
+  box-shadow: inset 0 1px rgba(255,255,255,.12),0 4px 8px #000;
+  color: #f4e4bd;
+  height: clamp(38px,4.1vw,56px);
+  min-width: clamp(34px,3.25vw,48px);
+}
+.rb-reference .rb-bet-tools button span { font-size: clamp(4px,.4vw,6px); }
+
+.rb-reference .rb-deal-button {
+  align-self: center;
+  background: radial-gradient(circle at 35% 24%,#fff4a8,#f3bd38 45%,#b76b0b 72%,#432004 75%);
+  border: 2px solid #ffe896;
+  border-radius: 50% 13px 13px 50%;
+  box-shadow: inset 0 0 0 3px rgba(93,45,5,.5),inset 0 2px rgba(255,255,255,.5),0 5px 11px #000,0 0 16px rgba(255,197,55,.28);
+  color: #422003 !important;
+  height: clamp(52px,5.5vw,76px);
+  min-height: 0;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+.rb-reference .rb-deal-button svg { filter: drop-shadow(0 1px #fff3a4); height: 56%; stroke-width: 5; width: 56%; }
+.rb-reference .rb-deal-button small { bottom: 4px; font-size: clamp(4px,.42vw,6px); font-weight: 1000; left: 0; letter-spacing: .04em; position: absolute; right: 0; text-align: center; }
+.rb-reference .rb-deal-button[data-ready="true"] { animation: rbFooterArrow 1.45s ease-in-out infinite; }
+.rb-reference .rb-deal-button:disabled { filter: grayscale(.68) brightness(.7); opacity: .62; }
+
+.rb-repeat-button {
+  align-items: center;
+  align-self: center;
+  background: linear-gradient(180deg,#74706e,#302f32 48%,#0d0d12);
+  border: 2px solid #aaa398;
+  border-radius: 9px;
+  box-shadow: inset 0 2px rgba(255,255,255,.25),inset 0 -2px #08080a,0 5px 11px #000;
+  color: #fff8e7;
+  display: flex;
+  gap: 6px;
+  height: clamp(46px,5.1vw,68px);
+  justify-content: center;
+  padding: 5px clamp(7px,.75vw,12px);
+  text-shadow: 0 2px 2px #000;
+}
+.rb-repeat-button svg { height: clamp(12px,1.3vw,18px); opacity: .7; width: clamp(12px,1.3vw,18px); }
+.rb-repeat-button span { align-items: flex-start; display: flex; flex-direction: column; }
+.rb-repeat-button b { font-family: Georgia,serif; font-size: clamp(10px,1.2vw,19px); font-weight: 700; text-transform: capitalize; }
+.rb-repeat-button small { color: rgba(255,239,202,.48); font-size: clamp(4px,.38vw,6px); font-weight: 900; letter-spacing: .09em; margin-top: 2px; }
+.rb-repeat-button:disabled { filter: grayscale(.8); opacity: .42; }
+
+.rb-footer-online { align-items: center; align-self: center; display: flex; flex-direction: column; justify-content: center; min-height: 54px; }
+.rb-footer-online > span { align-items: center; display: flex; height: clamp(27px,3.1vw,44px); justify-content: center; position: relative; width: clamp(37px,4vw,58px); }
+.rb-footer-online > span svg { color: #f6e0b8; filter: drop-shadow(0 3px 2px #000); height: 100%; stroke-width: 1.8; width: 100%; }
+.rb-footer-online > span > i { animation: premiumPulse 1.15s ease-in-out infinite; background: #50f49e; border: 1px solid #d8ffe8; border-radius: 50%; box-shadow: 0 0 9px #50f49e; height: 7px; position: absolute; right: 0; top: 0; width: 7px; z-index: 2; }
+.rb-footer-online > b { color: #fff5e4; font-family: Georgia,serif; font-size: clamp(8px,1vw,15px); line-height: .8; text-shadow: 0 2px 2px #000,2px 2px #a21a27; }
+.rb-footer-online > small { background: #b6182d; border: 1px solid #ff8291; border-radius: 999px; color: #fff; font-size: 5px; font-weight: 1000; padding: 1px 4px; position: absolute; right: 2px; top: 4px; }
+
+@keyframes rbFooterArrow { 50% { box-shadow: inset 0 0 0 3px rgba(93,45,5,.5),inset 0 2px rgba(255,255,255,.5),0 5px 11px #000,0 0 27px rgba(255,204,66,.62); filter: brightness(1.1); transform: translateX(2px); } }
+
+@media (max-width: 1000px) and (orientation: landscape) {
+  .rb-reference .rb-controls { gap: 4px; grid-template-columns: minmax(82px,.55fr) minmax(230px,1.7fr) auto 46px minmax(82px,.62fr) 52px; padding-inline: max(7px,env(safe-area-inset-left)) max(7px,env(safe-area-inset-right)); }
+  .rb-reference .rb-local-player { gap: 5px; padding-right: 5px; }
+  .rb-reference .rb-local-avatar { flex-basis: 46px; width: 46px; }
+  .rb-reference .rb-chip-deck .premium-chip-selector { gap: 4px; padding-inline: 2px; }
+  .rb-reference .rb-chip-deck .premium-chip-selector button { flex-basis: clamp(38px,5.1vw,48px); max-width: clamp(38px,5.1vw,48px); min-width: clamp(38px,5.1vw,48px); }
+  .rb-reference .rb-bet-tools button { min-width: 32px; }
+}
+
+@media (max-width: 760px) and (orientation: landscape) {
+  .rb-reference .rb-controls { grid-template-columns: minmax(72px,.48fr) minmax(218px,1.62fr) 58px 42px minmax(70px,.55fr) 44px; }
+  .rb-reference .rb-local-player > span { display: flex; }
+  .rb-reference .rb-local-player > span > b { display: none; }
+  .rb-reference .rb-local-player > span > small { font-size: 6px; margin-top: 0; }
+  .rb-reference .rb-local-avatar { flex-basis: 39px; width: 39px; }
+  .rb-reference .rb-chip-deck > small { display: none; }
+  .rb-reference .rb-bet-tools { display: flex; }
+  .rb-reference .rb-bet-tools button { height: 39px; min-width: 27px; }
+  .rb-reference .rb-bet-tools button span { display: none; }
+  .rb-repeat-button { gap: 3px; padding-inline: 5px; }.rb-repeat-button small { display: none; }
+}
+
+@media (max-width: 620px) and (orientation: landscape) {
+  .rb-reference .rb-controls { grid-template-columns: 70px minmax(196px,1fr) 54px 38px 64px 40px; }
+  .rb-reference .rb-bet-tools { display: flex; }.rb-reference .rb-bet-tools button { min-width: 25px; }
+}
+
+@media (max-height: 650px) and (orientation: landscape) {
+  .rb-reference .rb-controls { height: calc(76px + env(safe-area-inset-bottom)); padding-block: 7px max(4px,env(safe-area-inset-bottom)); }
+  .rb-reference .rb-local-avatar { max-height: 62px; }
+  .rb-reference .rb-chip-deck .premium-chip-selector button { flex-basis: clamp(42px,4.6vw,54px); max-width: clamp(42px,4.6vw,54px); min-width: clamp(42px,4.6vw,54px); }
+  .rb-reference .rb-deal-button { height: 60px; }
+  .rb-repeat-button { height: 54px; }
+}
+
+@media (orientation: landscape) and (max-height: 420px) {
+  .rb-reference .rb-controls { grid-template-columns: minmax(80px,.5fr) minmax(220px,1.7fr) 58px 39px minmax(70px,.55fr) 44px; height: calc(62px + env(safe-area-inset-bottom)); padding-block: 3px max(3px,env(safe-area-inset-bottom)); }
+  .rb-reference .rb-controls::after { height: 5px; top: -5px; }
+  .rb-reference .rb-local-player { padding-block: 1px; }.rb-reference .rb-local-avatar { flex-basis: 40px; height: 48px; width: 40px; }
+  .rb-reference .rb-local-avatar > span { display: none; }
+  .rb-reference .rb-chip-deck .premium-chip-selector { padding-block: 1px; }
+  .rb-reference .rb-chip-deck .premium-chip-selector button { flex-basis: clamp(36px,5vw,42px); max-width: clamp(36px,5vw,42px); min-width: clamp(36px,5vw,42px); }
+  .rb-reference .rb-chip-deck .premium-chip-selector button.selected { transform: translateY(-3px) scale(1.06); }
+  .rb-reference .rb-bet-tools button { height: 38px; }
+  .rb-reference .rb-deal-button { height: 48px; }
+  .rb-repeat-button { height: 44px; }.rb-repeat-button b { font-size: 10px; }.rb-repeat-button svg { display: none; }
+  .rb-footer-online { min-height: 44px; }.rb-footer-online > span { height: 26px; width: 36px; }.rb-footer-online > b { font-size: 8px; }
+}
+
+@media (max-width: 620px) and (orientation: landscape) and (max-height: 420px) {
+  .rb-reference .rb-controls { grid-template-columns: 70px minmax(196px,1fr) 54px 38px 64px 40px; }
+  .rb-reference .rb-bet-tools { display: flex; }
+}
+
+/* Red vs Black — royal emerald elevation. The supplied table reference uses a
+   broad green felt arena, character cards, layered chip pots and a gold HUD. */
+.rb-game.rb-reference {
+  --rb-emerald: #08705f;
+  --rb-emerald-dark: #023c36;
+  --rb-royal-gold: #f9d77d;
+  background: radial-gradient(ellipse at 50% 43%,#31102d 0,#12091c 58%,#05040a 100%);
+}
+.rb-reference::before {
+  background:
+    radial-gradient(circle at 25% 14%,rgba(255,66,139,.19),transparent 18%),
+    radial-gradient(circle at 77% 14%,rgba(89,101,255,.2),transparent 20%),
+    linear-gradient(90deg,rgba(7,2,15,.72),transparent 14% 86%,rgba(7,2,15,.72));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+.rb-reference .rb-backdrop { filter: contrast(1.07) saturate(1.12) brightness(.96); }
+.rb-reference .rb-backdrop::before { background: linear-gradient(90deg,rgba(9,3,18,.34),transparent 16% 84%,rgba(9,3,18,.34)); }
+.rb-reference .rb-backdrop::after { background: radial-gradient(ellipse at 50% 43%,transparent 31%,rgba(6,2,15,.16) 61%,rgba(3,2,9,.48) 100%); }
+
+.rb-reference .rb-ref-hud { inset-inline: max(4.2%,env(safe-area-inset-left)) max(4.2%,env(safe-area-inset-right)); }
+.rb-reference .rb-ref-hud nav { gap: clamp(7px,.85vw,13px); }
+.rb-reference .rb-ref-round-control {
+  background: linear-gradient(145deg,#8b672b,#2e1b0b 55%,#0f0905);
+  border: 2px solid #f6d780;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 2px #2a1608,inset 0 2px 4px rgba(255,244,186,.36),0 5px 12px #000,0 0 15px rgba(243,196,91,.22);
+  height: clamp(40px,4vw,61px);
+  width: clamp(40px,4vw,61px);
+}
+.rb-reference .rb-ref-wifi { color: #f3d67e; height: clamp(35px,3.6vw,55px); width: clamp(35px,3.6vw,55px); }
+.rb-reference .rb-ref-wifi::before { background: #4affaa; border-color: #082f21; box-shadow: 0 0 9px #4affaa; }
+.rb-reference .rb-ref-sound {
+  background: linear-gradient(145deg,#8b672b,#2e1b0b 58%,#0f0905);
+  border: 2px solid #f6d780;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 2px #2a1608,inset 0 2px 4px rgba(255,244,186,.32),0 5px 12px #000;
+  color: #ffe9a7 !important;
+  height: clamp(40px,4vw,61px);
+  right: max(8.8%,env(safe-area-inset-right));
+  top: max(7px,env(safe-area-inset-top));
+  width: clamp(40px,4vw,61px);
+  z-index: 76;
+}
+
+.rb-reference .rb-results {
+  background: linear-gradient(180deg,rgba(44,33,43,.98),rgba(16,15,22,.98));
+  border-color: #c4974e;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 2px rgba(255,222,137,.09),0 7px 15px rgba(0,0,0,.72),0 0 20px rgba(236,174,69,.11);
+  top: 17.2%;
+  width: 42%;
+}
+.rb-reference .rb-results::before { background: linear-gradient(90deg,#812235,#ff425e 49%,#7c1e32); border-color: #df9b5b; }
+.rb-reference .rb-result-lamps i { box-shadow: inset 0 -2px 4px #590713,0 1px 4px #000,0 0 7px rgba(255,66,92,.32); }
+.rb-reference .rb-result-labels span { background: linear-gradient(180deg,#655b5c,#302c31); border-color: #8a735f; color: #e3dcd5; }
+.rb-reference .rb-result-labels span[data-tone="red"] { background: linear-gradient(180deg,#ffd26f,#c8872d); border-color: #ffe39c; color: #4b2705; }
+
+.rb-reference .rb-player-rail { bottom: calc(13.5% + env(safe-area-inset-bottom)); top: 12%; width: clamp(70px,7.2vw,110px); }
+.rb-reference .rb-player-rail.left { left: max(10.2%,env(safe-area-inset-left)); }
+.rb-reference .rb-player-rail.right { right: max(10.2%,env(safe-area-inset-right)); }
+.rb-reference .rb-player-seat,.rb-reference .rb-player-rail.right .rb-player-seat { height: 31%; justify-content: center; }
+.rb-reference .rb-player-avatar,.rb-reference .rb-player-rail.right .rb-player-avatar {
+  border: 2px solid #f2d277;
+  border-radius: 11px;
+  box-shadow: inset 0 0 0 2px #281507,0 5px 9px #000,0 0 0 3px rgba(104,20,77,.72),0 0 16px rgba(246,197,91,.2);
+  height: clamp(45px,5.5vw,82px);
+  width: clamp(39px,4.6vw,69px);
+}
+.rb-reference .rb-player-copy,.rb-reference .rb-player-rail.right .rb-player-copy {
+  background: linear-gradient(180deg,rgba(26,24,31,.98),rgba(6,6,10,.98));
+  border-color: #aa8143;
+  border-radius: 3px;
+  box-shadow: 0 3px 7px #000;
+  margin-top: -9px;
+  min-width: 96%;
+  padding: 5px 4px 3px;
+}
+.rb-reference .rb-player-copy b { color: #fff8df; }
+.rb-reference .rb-player-rank {
+  align-items: center;
+  background: linear-gradient(180deg,#fff3a7,#c98122);
+  border: 1px solid #fff0a1;
+  border-radius: 50%;
+  color: #4b2605;
+  display: flex;
+  font-size: clamp(6px,.65vw,10px);
+  font-weight: 1000;
+  height: clamp(16px,1.5vw,23px);
+  justify-content: center;
+  position: absolute;
+  right: 5%;
+  top: 6%;
+  width: clamp(16px,1.5vw,23px);
+  z-index: 7;
+}
+.rb-reference .rb-player-rail.right .rb-player-rank { left: 5%; right: auto; }
+.rb-reference .rb-seat-chip { left: 70%; top: 20%; }.rb-reference .rb-player-rail.right .rb-seat-chip { right: 70%; }
+
+.rb-house-pot {
+  align-items: center;
+  backdrop-filter: blur(7px);
+  background: linear-gradient(180deg,rgba(2,77,65,.94),rgba(1,44,40,.96));
+  border: 1px solid rgba(105,255,214,.34);
+  border-radius: 7px 7px 2px 2px;
+  box-shadow: inset 0 1px rgba(255,255,255,.09),0 5px 11px rgba(0,0,0,.46);
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 9px;
+  position: absolute;
+  top: 25.4%;
+  width: 21%;
+  z-index: 46;
+}
+.rb-house-pot.black { left: 27.3%; }.rb-house-pot.red { right: 27.3%; }
+.rb-house-pot small { color: rgba(211,255,237,.58); font-size: clamp(5px,.58vw,8px); font-weight: 1000; letter-spacing: .12em; }
+.rb-house-pot b { color: #ffe287; font-size: clamp(8px,.92vw,14px); font-variant-numeric: tabular-nums; text-shadow: 0 2px 4px #000; }
+.rb-house-pot.red { background: linear-gradient(180deg,rgba(101,44,48,.95),rgba(49,22,31,.97)); border-color: rgba(255,149,137,.42); }
+
+.rb-reference .rb-duel-display { inset-inline: 23%; }
+.rb-reference .premium-duel-cards { filter: drop-shadow(0 7px 8px rgba(0,0,0,.6)); }
+.rb-reference .premium-duel-cards > i { opacity: 1; width: 13%; }
+.rb-reference .premium-duel-cards > i small { color: #ffe8a1; }
+.rb-reference .premium-playing-card { height: clamp(70px,14.2vh,110px); width: clamp(47px,9.2vh,72px); }
+.rb-reference .premium-card-back {
+  background: radial-gradient(circle at 50% 35%,rgba(245,211,110,.14),transparent 23%),repeating-linear-gradient(45deg,#121417 0 4px,#34342c 4px 8px);
+  border-color: #f0d784;
+  box-shadow: inset 0 0 0 3px #11120e,inset 0 0 0 5px #d6c78d,0 6px 10px #000,0 0 13px rgba(244,204,99,.2);
+}
+.rb-reference .red-hand .premium-card-back { background: radial-gradient(circle at 50% 35%,rgba(255,216,112,.13),transparent 23%),repeating-linear-gradient(45deg,#2c0a12 0 4px,#701426 4px 8px); }
+
+.rb-reference .rb-betting-board {
+  background:
+    radial-gradient(ellipse at 50% 0,rgba(41,210,170,.19),transparent 52%),
+    repeating-linear-gradient(35deg,rgba(255,255,255,.012) 0 1px,transparent 1px 5px),
+    linear-gradient(180deg,rgba(6,109,91,.98),rgba(2,72,65,.98));
+  border: 2px solid rgba(126,240,198,.48);
+  border-radius: 14px 14px 34px 34px;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.04),inset 0 -24px 45px rgba(0,27,25,.28),0 0 0 5px rgba(30,15,14,.44),0 9px 19px rgba(0,0,0,.48),0 0 24px rgba(25,199,153,.1);
+  height: 51%;
+  left: 19.5%;
+  right: 19.5%;
+  top: 28.6%;
+}
+.rb-reference .rb-betting-board::after {
+  border: 1px solid rgba(204,255,235,.12);
+  border-radius: 10px 10px 29px 29px;
+  content: "";
+  inset: 6px;
+  pointer-events: none;
+  position: absolute;
+}
+.rb-felt-crest {
+  align-items: center;
+  color: rgba(197,255,231,.07);
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  top: 44%;
+  transform: translate(-50%,-50%);
+  z-index: 1;
+}
+.rb-felt-crest span { font-family: Georgia,serif; font-size: clamp(28px,4.5vw,68px); line-height: .7; }
+.rb-felt-crest b { font-family: Georgia,serif; font-size: clamp(10px,1.45vw,22px); letter-spacing: .18em; white-space: nowrap; }
+.rb-felt-crest i { font-size: clamp(4px,.48vw,7px); font-style: normal; letter-spacing: .24em; margin-top: 5px; white-space: nowrap; }
+.rb-reference .rb-main-zones { gap: 8px; height: 46%; inset: 5px 6px auto; padding: 0; position: absolute; }
+.rb-reference .rb-bet-zone.large { border-color: rgba(193,255,232,.24); border-radius: 10px; box-shadow: inset 0 0 22px rgba(0,26,24,.28); }
+.rb-reference .rb-bet-zone.large[data-tone="black"] { background: linear-gradient(145deg,rgba(15,50,54,.67),rgba(6,34,41,.42)); }
+.rb-reference .rb-bet-zone.large[data-tone="red"] { background: linear-gradient(145deg,rgba(113,48,51,.57),rgba(51,35,45,.38)); }
+.rb-reference .rb-bet-zone.large > em { color: #ffe58e; font-size: clamp(7px,.85vw,13px); top: 6px; }
+.rb-reference .rb-bet-zone.large > span:not(.rb-chip-cloud) { color: rgba(225,255,243,.24); font-size: clamp(21px,2.55vw,40px); letter-spacing: .12em; }
+.rb-reference .rb-bet-zone.large > small { color: rgba(255,240,184,.35); }
+.rb-reference .rb-lucky-row {
+  background: rgba(1,50,47,.28);
+  border: 1px solid rgba(183,255,230,.15);
+  border-radius: 10px 10px 24px 24px;
+  bottom: 22px;
+  height: 46%;
+  left: 6px;
+  right: 6px;
+}
+.rb-reference .rb-lucky-title { color: rgba(226,255,242,.62); font-size: clamp(6px,.7vw,11px); }
+.rb-reference .rb-lucky-title::before,.rb-reference .rb-lucky-title::after { background: linear-gradient(90deg,transparent,rgba(239,210,122,.42)); content: ""; height: 1px; width: 24%; }
+.rb-reference .rb-lucky-title::after { background: linear-gradient(90deg,rgba(239,210,122,.42),transparent); }
+.rb-reference .rb-lucky-title b { color: #ffe68d; }
+.rb-reference .rb-lucky-row > div { gap: 2px; }
+.rb-reference .rb-lucky-row .rb-bet-zone { border-left: 1px solid rgba(194,255,231,.1); }
+.rb-reference .rb-lucky-row .rb-bet-zone:first-child { border-left: 0; }
+.rb-reference .rb-lucky-row .rb-bet-zone > span:not(.rb-chip-cloud) { color: rgba(227,255,244,.62); text-shadow: 0 2px 4px #003b31; }
+.rb-reference .rb-lucky-row .rb-bet-zone > small { color: #ffe28a; }
+.rb-payout-ribbon {
+  align-items: center;
+  bottom: 3px;
+  color: rgba(213,255,237,.6);
+  display: flex;
+  font-size: clamp(4px,.46vw,7px);
+  gap: clamp(5px,1.1vw,16px);
+  justify-content: center;
+  left: 12px;
+  letter-spacing: .04em;
+  position: absolute;
+  right: 12px;
+  z-index: 9;
+}
+.rb-payout-ribbon span { white-space: nowrap; }.rb-payout-ribbon b { color: #ffe28d; margin-right: 3px; }
+
+.rb-reference .rb-chip-cloud > i {
+  border-width: 2px;
+  box-shadow: inset 0 0 0 3px #9a1731,inset 0 0 0 4px rgba(255,255,255,.35),0 3px 6px rgba(0,0,0,.85),0 0 5px rgba(255,222,138,.18);
+}
+.rb-reference .rb-bet-zone:active:not(:disabled) { filter: brightness(1.14); transform: scale(.985); }
+.rb-reference .rb-bet-zone.has-bet { box-shadow: inset 0 0 0 2px #ffe090,inset 0 0 28px rgba(255,211,77,.12),0 0 17px rgba(255,206,93,.36); }
+
+.rb-table-timer {
+  align-items: center;
+  background: radial-gradient(circle at 38% 28%,#fff6b8,#e7a73b 45%,#8b4708 72%,#311501 75%);
+  border: 3px solid #ffe89a;
+  border-radius: 50%;
+  bottom: calc(9.5% + env(safe-area-inset-bottom));
+  box-shadow: inset 0 0 0 4px #75400d,inset 0 0 0 6px rgba(255,248,190,.42),0 5px 12px #000,0 0 18px rgba(255,190,62,.38);
+  color: #421d02;
+  display: flex;
+  flex-direction: column;
+  height: clamp(47px,5.8vw,84px);
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%);
+  width: clamp(47px,5.8vw,84px);
+  z-index: 58;
+}
+.rb-table-timer::before,.rb-table-timer::after { background: radial-gradient(circle,#fff1a3,#ba6e19 65%,#4d2303); border: 1px solid #ffe69a; border-radius: 50%; content: ""; height: 12%; position: absolute; top: -9%; width: 20%; }
+.rb-table-timer::before { left: 17%; }.rb-table-timer::after { right: 17%; }
+.rb-table-timer small { font-size: clamp(4px,.4vw,6px); font-weight: 1000; letter-spacing: .12em; }
+.rb-table-timer b { font-family: Georgia,serif; font-size: clamp(11px,1.45vw,22px); line-height: .9; }
+.rb-table-timer span { font-size: clamp(3px,.33vw,5px); font-weight: 1000; letter-spacing: .08em; margin-top: 2px; }
+.rb-table-timer[data-phase="ANIMATING"] { animation: rbTimerPulse .72s ease-in-out infinite; }.rb-table-timer[data-phase="RESULT"] { filter: hue-rotate(46deg); }
+.rb-reference .rb-ref-message { display: none; }
+.rb-reference .rb-ref-message b { color: #fff7dd; font-family: Georgia,serif; font-weight: 700; letter-spacing: .02em; }
+.rb-reference .rb-ref-message span { color: rgba(238,255,249,.84); }
+
+.rb-reference .rb-controls {
+  background: linear-gradient(180deg,transparent,rgba(15,9,17,.88) 18%,#08070c 44%,#050509 100%);
+  border-top: 1px solid rgba(240,199,106,.2);
+  box-shadow: 0 -10px 25px rgba(0,0,0,.58),inset 0 1px rgba(255,222,142,.05);
+}
+.rb-reference .rb-controls::before { background: linear-gradient(90deg,transparent,#8d5d22 17%,#f1cd6b 50%,#8d5d22 83%,transparent); content: ""; height: 2px; left: 12%; position: absolute; right: 12%; top: 14px; }
+.rb-reference .rb-local-avatar { background: radial-gradient(circle at 36% 30%,#d53d45,#5c0d1d 57%,#160913); border-color: #f6d577; box-shadow: inset 0 0 0 3px rgba(255,255,255,.06),0 4px 10px #000,0 0 12px rgba(235,185,78,.2); }
+.rb-reference .rb-chip-deck > small { color: rgba(255,239,195,.58); }
+.rb-reference .rb-chip-deck .premium-chip-selector button { box-shadow: inset 0 0 0 3px hsl(var(--chip-hue) 62% 28%),inset 0 0 0 5px rgba(255,255,255,.28),0 6px 10px #000,0 0 8px rgba(255,218,119,.11); }
+.rb-reference .rb-chip-deck .premium-chip-selector button.selected { box-shadow: inset 0 0 0 3px hsl(var(--chip-hue) 62% 28%),inset 0 0 0 5px rgba(255,255,255,.42),0 8px 16px #000,0 0 22px #ffd26b; filter: brightness(1.3) saturate(1.08); }
+.rb-reference .rb-bet-tools button { background: linear-gradient(180deg,rgba(71,63,70,.62),rgba(16,15,20,.88)); border-color: rgba(231,196,119,.24); color: #f5e3b6; }
+.rb-reference .rb-deal-button { background: linear-gradient(180deg,#fff0a0,#e5a13b 48%,#9a550f); border-color: #fff1ad; box-shadow: inset 0 2px 0 rgba(255,255,255,.55),0 6px 14px #000,0 0 24px rgba(255,190,65,.34); min-height: clamp(45px,5.2vw,68px); }
+.rb-reference .rb-disclosure { color: rgba(224,255,242,.55); font-size: clamp(4px,.42vw,7px); font-weight: 900; gap: 4px; letter-spacing: .08em; }
+.rb-reference .rb-disclosure > i { animation: premiumPulse 1s infinite; background: #45f5a2; border-radius: 50%; box-shadow: 0 0 8px #45f5a2; height: 5px; width: 5px; }
+
+@keyframes rbTimerPulse { 50% { box-shadow: inset 0 0 0 4px #75400d,inset 0 0 0 6px rgba(255,248,190,.42),0 5px 12px #000,0 0 30px rgba(255,190,62,.68); transform: translateX(-50%) scale(1.04); } }
+
+@media (max-width: 1000px) and (orientation: landscape) {
+  .rb-reference .rb-betting-board { left: 17.5%; right: 17.5%; }
+  .rb-reference .rb-duel-display { inset-inline: 20.5%; }
+  .rb-house-pot.black { left: 23.8%; }.rb-house-pot.red { right: 23.8%; }.rb-house-pot { width: 24%; }
+  .rb-reference .rb-player-rail.left { left: 8.6%; }.rb-reference .rb-player-rail.right { right: 8.6%; }
+}
+
+@media (max-height: 650px) and (orientation: landscape) {
+  .rb-reference .rb-results { top: 16.6%; }
+  .rb-reference .rb-betting-board { height: 51.5%; top: 27.8%; }
+  .rb-house-pot { padding-block: 3px; top: 24.3%; }
+  .rb-reference .rb-ref-message { bottom: calc(15% + env(safe-area-inset-bottom)); }
+  .rb-reference .rb-controls { height: calc(76px + env(safe-area-inset-bottom)); padding-block: 7px max(4px,env(safe-area-inset-bottom)); }
+  .rb-reference .rb-deal-button { min-height: 60px; }
+}
+
+@media (orientation: landscape) and (max-height: 420px) {
+  .rb-reference .rb-ref-hud { inset-inline: max(3.4%,env(safe-area-inset-left)) max(3.4%,env(safe-area-inset-right)); }
+  .rb-reference .rb-ref-round-control,.rb-reference .rb-ref-sound { border-radius: 8px; height: 35px; width: 35px; }
+  .rb-reference .rb-ref-sound { right: max(8%,env(safe-area-inset-right)); }
+  .rb-reference .rb-player-rail { bottom: calc(61px + env(safe-area-inset-bottom)); top: 10%; width: 52px; }
+  .rb-reference .rb-player-rail.left { left: max(7.6%,env(safe-area-inset-left)); }.rb-reference .rb-player-rail.right { right: max(7.6%,env(safe-area-inset-right)); }
+  .rb-reference .rb-player-avatar,.rb-reference .rb-player-rail.right .rb-player-avatar { height: 42px; width: 35px; }
+  .rb-reference .rb-player-copy,.rb-reference .rb-player-rail.right .rb-player-copy { min-width: 50px; padding-block: 2px; }.rb-reference .rb-player-copy b { font-size: 5px; }.rb-reference .rb-player-copy span { font-size: 4px; }
+  .rb-reference .rb-player-rank { height: 13px; width: 13px; }
+  .rb-reference .rb-results { height: 47px; top: 16%; width: 47%; }
+  .rb-reference .rb-result-labels span { height: 18px; }
+  .rb-reference .premium-playing-card { height: 60px; width: 39px; }
+  .rb-reference .rb-duel-display { inset-inline: 19%; }
+  .rb-reference .rb-betting-board { height: 50%; left: 16%; right: 16%; top: 28%; }
+  .rb-house-pot { padding: 2px 5px; top: 24.7%; width: 25%; }.rb-house-pot.black { left: 21.8%; }.rb-house-pot.red { right: 21.8%; }.rb-house-pot small { font-size: 4px; }.rb-house-pot b { font-size: 7px; }
+  .rb-reference .rb-main-zones { gap: 4px; }
+  .rb-reference .rb-lucky-row { bottom: 16px; }.rb-reference .rb-lucky-title { height: 12px; }.rb-reference .rb-lucky-row > div { height: calc(100% - 12px); }
+  .rb-payout-ribbon { bottom: 2px; font-size: 3px; gap: 5px; }
+  .rb-felt-crest i { display: none; }
+  .rb-table-timer { bottom: calc(55px + env(safe-area-inset-bottom)); border-width: 2px; height: 39px; width: 39px; }
+  .rb-reference .rb-ref-message { bottom: calc(75px + env(safe-area-inset-bottom)); }.rb-reference .rb-ref-message b { font-size: 12px; }.rb-reference .rb-ref-message span { display: none; }
+  .rb-reference .rb-controls { height: calc(62px + env(safe-area-inset-bottom)); padding-block: 3px max(3px,env(safe-area-inset-bottom)); }
+  .rb-reference .rb-controls::before { top: 0; }
+  .rb-reference .rb-chip-deck .premium-chip-selector button { flex-basis: 31px; max-width: 31px; min-width: 31px; }
+  .rb-reference .rb-deal-button { min-height: 44px; }
+  .rb-reference .rb-coin-flight-layer { bottom: calc(62px + env(safe-area-inset-bottom)); }
+}
+
+/* Keep the casino rail as the final footer authority after the table-wide
+   reference pass above. */
+.rb-reference .rb-controls {
+  background: linear-gradient(180deg,rgba(54,43,44,.94) 0,rgba(17,16,23,.98) 9%,#08080d 54%,#030307 100%);
+  border-top-color: #7d6638;
+  box-shadow: 0 -9px 24px rgba(0,0,0,.72),inset 0 2px rgba(255,229,151,.05),inset 0 -1px rgba(255,255,255,.04);
+}
+.rb-reference .rb-controls::before { background: linear-gradient(90deg,transparent,#8b622a 8%,#f1d17d 27%,#725020 50%,#f1d17d 73%,#8b622a 92%,transparent); inset: 0 5% auto; top: 0; }
+.rb-reference .rb-local-avatar {
+  background-image: linear-gradient(rgba(47,5,18,.08),rgba(5,5,10,.12)),url('/images/red-black/table-players.png');
+  background-position: center,66.666% 0;
+  background-repeat: no-repeat;
+  background-size: cover,400% 200%;
+  border-color: #c99c4c;
+  box-shadow: inset 0 0 0 2px rgba(16,8,8,.65),2px 0 7px #000;
+}
+.rb-reference .rb-chip-deck .premium-chip-selector button { box-shadow: inset 0 0 0 4px hsl(var(--chip-hue) 62% 28%),inset 0 0 0 6px rgba(255,255,255,.28),0 6px 10px #000,0 0 8px rgba(255,218,119,.13); }
+.rb-reference .rb-chip-deck .premium-chip-selector button.selected { box-shadow: inset 0 0 0 4px hsl(var(--chip-hue) 62% 28%),inset 0 0 0 6px rgba(255,255,255,.42),0 8px 16px #000,0 0 22px #ffd26b; }
+.rb-reference .rb-bet-tools button { background: linear-gradient(180deg,#464148,#17161c 63%,#08080c); border-color: #8e857d; color: #f4e4bd; }
+.rb-reference .rb-deal-button {
+  background: radial-gradient(circle at 35% 24%,#fff4a8,#f3bd38 45%,#b76b0b 72%,#432004 75%);
+  border-color: #ffe896;
+  box-shadow: inset 0 0 0 3px rgba(93,45,5,.5),inset 0 2px rgba(255,255,255,.5),0 5px 11px #000,0 0 16px rgba(255,197,55,.28);
+  min-height: 0;
+}
+
+@media (max-height: 650px) and (orientation: landscape) {
+  .rb-reference .rb-deal-button { min-height: 0; }
+}
+
+@media (orientation: landscape) and (max-height: 420px) {
+  .rb-reference .rb-chip-deck .premium-chip-selector button { flex-basis: clamp(36px,5vw,42px); max-width: clamp(36px,5vw,42px); min-width: clamp(36px,5vw,42px); }
+  .rb-reference .rb-deal-button { min-height: 0; }
+}

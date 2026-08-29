@@ -49,7 +49,8 @@ export async function POST(request: Request) {
         await PenaltyMatch.create([{
           matchId, tierId, stadiumId: "champions-arena", environmentSeed: body.environmentSeed,
           entryCredits: tier.entry, prizePool: tier.pool, playerIds: humanPlayers.map((player) => player.id),
-          status: "COUNTDOWN", startedAt: new Date(body.startAt as number), players: players.map(({ id, username }) => ({ id, username })),
+          status: "COUNTDOWN", startedAt: new Date(body.startAt as number), aiFavored: body.aiFavored !== false,
+          players: players.map(({ id, username }) => ({ id, username })),
         }], { session });
         for (const player of humanPlayers) {
           await applyWalletChange({

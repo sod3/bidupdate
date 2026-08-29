@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { premiumGameDefinitions, type PremiumGameId } from "@/lib/premium-games/definitions";
-import { createFlightCrash, createPremiumOutcome, flightElapsedFor, flightMultiplierAt } from "@/lib/premium-games/engine";
+import { PREMIUM_TARGET_WIN_PERCENT, createFlightCrash, createPremiumOutcome, flightElapsedFor, flightMultiplierAt } from "@/lib/premium-games/engine";
 import { carSelectorAngle, roulettePresentation } from "@/lib/premium-games/presentation";
 
 const settledGames = Object.keys(premiumGameDefinitions).filter((gameId) => gameId !== "flight-x") as Array<Exclude<PremiumGameId, "flight-x">>;
@@ -28,6 +28,17 @@ describe("premium shared game engine", () => {
     }
   });
 
+  it("targets very hard results with about 10% winning rounds", () => {
+    expect(PREMIUM_TARGET_WIN_PERCENT).toBe(10);
+    for (const gameId of settledGames) {
+      const selection = { id: premiumGameDefinitions[gameId].options[0].id, amount: 20 };
+      const outcomes = Array.from({ length: 1_000 }, (_, index) => createPremiumOutcome(gameId, `${gameId}:difficulty:${index}`, [selection]));
+      const winRate = outcomes.filter((outcome) => outcome.result === "WIN").length / outcomes.length;
+      expect(winRate).toBeGreaterThan(0.07);
+      expect(winRate).toBeLessThan(0.13);
+    }
+  });
+
   it("uses an invertible Flight X display curve and bounded committed endpoint", () => {
     for (const multiplier of [1, 1.05, 1.5, 2, 5, 25, 100]) {
       expect(flightMultiplierAt(flightElapsedFor(multiplier))).toBeCloseTo(multiplier, 2);
@@ -37,6 +48,10 @@ describe("premium shared game engine", () => {
       expect(crash).toBeGreaterThanOrEqual(1);
       expect(crash).toBeLessThanOrEqual(100);
     }
+    const survivals = Array.from({ length: 2_000 }, (_, index) => createFlightCrash(`flight:survival:${index}`));
+    const launchSurvivalRate = survivals.filter((crash) => crash > 1).length / survivals.length;
+    expect(launchSurvivalRate).toBeGreaterThan(0.07);
+    expect(launchSurvivalRate).toBeLessThan(0.13);
   });
 
   it("maps roulette numbers and car winners to distinct animation landings", () => {

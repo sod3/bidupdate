@@ -63,6 +63,9 @@ export async function POST(request: Request) {
         signupFingerprintHash: fingerprintHash,
         referralCode: generateReferralCode(),
         referredByUserId: referrer?._id ?? null,
+        // Registration signs the user in immediately, so it is also the first
+        // successful login for admin activity reporting.
+        lastLoginAt: new Date(),
       }], { session });
       userId = user.id;
       await createWallet(user.id, 0, session);

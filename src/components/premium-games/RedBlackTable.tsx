@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronDown, Coins, RotateCcw, ShoppingCart, Sparkles, Trash2, UsersRound, Volume2, VolumeX, Wifi } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Coins, RotateCcw, ShoppingCart, Sparkles, Trash2, UsersRound, Volume2, VolumeX, Wifi } from "lucide-react";
 import { ChipSelector } from "@/components/premium-games/GameChrome";
 import { GameStage } from "@/components/premium-games/GameStage";
 import type { ClientHistoryItem, CompletedPremiumRound } from "@/lib/premium-games/client";
@@ -71,6 +71,7 @@ function PlayerSeat({ player, side }: { player: TablePlayer; side: "left" | "rig
   const column = player.avatar % 4;
   const row = Math.floor(player.avatar / 4);
   return <div className={`rb-player-seat seat-${side}`} data-bet={player.side}>
+    <span className="rb-player-rank" aria-hidden="true">{player.avatar + 1}</span>
     <div className="rb-player-avatar" style={{ backgroundPosition: `${column * 33.333}% ${row * 100}%` }} />
     <div className="rb-player-copy"><b>{player.name}</b><span><Coins />{compactCredits(player.balance)}</span></div>
     <i key={player.pulse} className="rb-seat-chip">{compactCredits(player.chip)}</i>
@@ -230,8 +231,11 @@ export function RedBlackTable({
       <button onClick={onHistory} aria-label="Open full result history">↗</button>
     </div>
 
-    <aside className="rb-player-rail left" aria-label="Left table players">{players.slice(0, 4).map((player) => <PlayerSeat key={player.name} player={player} side="left" />)}</aside>
-    <aside className="rb-player-rail right" aria-label="Right table players">{players.slice(4).map((player) => <PlayerSeat key={player.name} player={player} side="right" />)}</aside>
+    <aside className="rb-player-rail left" aria-label="Left table players">{players.slice(0, 3).map((player) => <PlayerSeat key={player.name} player={player} side="left" />)}</aside>
+    <aside className="rb-player-rail right" aria-label="Right table players">{players.slice(4, 7).map((player) => <PlayerSeat key={player.name} player={player} side="right" />)}</aside>
+
+    <div className="rb-house-pot black" aria-label={`Black house pot ${blackPot} credits`}><small>BLACK HOUSE</small><b>♠ {compactCredits(blackPot)}</b></div>
+    <div className="rb-house-pot red" aria-label={`Red house pot ${redPot} credits`}><small>RED HOUSE</small><b>{compactCredits(redPot)} ♥</b></div>
 
     <section className="rb-table">
       <div className="rb-table-rim"><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
@@ -246,6 +250,7 @@ export function RedBlackTable({
       </section>
 
       <section className="rb-betting-board" aria-label="Betting table">
+        <div className="rb-felt-crest" aria-hidden="true"><span>♛</span><b>ROYAL DUEL</b><i>FORTUNE FAVOURS THE BOLD</i></div>
         <div className="rb-board-pot"><span><Coins /> TABLE ACTION</span><b>{compactCredits(virtualPot)} CR</b></div>
         <div className="rb-main-zones">
           <BetZone option={black} amount={bets.get("BLACK") ?? 0} winning={winning.has("BLACK")} disabled={disabled} onSelect={onSelect} large pot={blackPot} cloudSeed={2} />
@@ -256,25 +261,40 @@ export function RedBlackTable({
           <span className="rb-lucky-title"><Sparkles /> LUCKY HIT <b>{compactCredits([...bets].filter(([id]) => !["RED", "BLACK"].includes(id)).reduce((total, [, amount]) => total + amount, 0))} CR</b></span>
           <div>{sideOptions.map((option, index) => <BetZone key={option.id} option={option} amount={bets.get(option.id) ?? 0} winning={winning.has(option.id)} disabled={disabled} onSelect={onSelect} cloudSeed={index + 8} />)}</div>
         </div>
+        <div className="rb-payout-ribbon" aria-hidden="true">{sideOptions.map((option) => <span key={option.id}><b>{option.label}</b>{option.payout.replace(" return", "")}</span>)}</div>
       </section>
+
+      <div className="rb-table-timer" data-phase={phase} aria-label={stateLabel}>
+        <small>{phase === "BETTING" ? "BETTING" : phase === "CLOSED" ? "LOCKED" : phase === "ANIMATING" ? "DUEL" : "RESULT"}</small>
+        <b>{phase === "CLOSED" ? countdown || "•" : phase === "BETTING" ? "LIVE" : phase === "ANIMATING" ? "VS" : "✓"}</b>
+        <span>{phase === "BETTING" ? "OPEN" : phase === "CLOSED" ? "NO MORE BETS" : phase === "ANIMATING" ? "IN PLAY" : "COMPLETE"}</span>
+      </div>
     </section>
 
     <div className="rb-ref-message"><b>{phase === "BETTING" ? "Betting…" : stateLabel}</b><span>{phase === "BETTING" ? "Choose a chip and tap the table." : "The royal hands are in motion."}</span></div>
 
-    <footer className="rb-controls">
-      <div className="rb-local-player"><div className="rb-local-avatar">YOU</div><span><small>YOUR SEAT</small><b>{balance.toLocaleString("en-PK", { maximumFractionDigits: 0 })} CR</b></span></div>
-      <div className="rb-chip-deck"><small>SELECT CHIP</small><ChipSelector chips={chips} selected={selectedChip} setSelected={onChooseChip} disabled={disabled} /></div>
-      <div className="rb-bet-tools">
-        <button onClick={onClear} disabled={disabled || !bets.size}><Trash2 /><span>CLEAR</span></button>
-        <button onClick={onRepeat} disabled={disabled}><RotateCcw /><span>REPEAT</span></button>
-        <button onClick={onDouble} disabled={disabled || !bets.size}><b>2×</b><span>DOUBLE</span></button>
+    <footer className="rb-controls" aria-label="Red vs Black betting controls">
+      <div className="rb-local-player" aria-label={`Your balance is ${balance.toLocaleString("en-PK", { maximumFractionDigits: 0 })} credits`}>
+        <div className="rb-local-avatar" aria-hidden="true"><span>VIP</span></div>
+        <span><b>ROYAL PLAYER</b><small><Coins />{balance.toLocaleString("en-PK", { maximumFractionDigits: 0 })}</small></span>
       </div>
-      <div className="rb-stake-summary"><small>BET / RETURN</small><b>{stake ? `${stake.toLocaleString()} CR` : "—"}</b><span>{possibleReturn}</span></div>
-      <button className="rb-deal-button" disabled={disabled || stake < minStake || stake > balance} onClick={onPlay}>
-        <Sparkles /><span><small>{busy ? "SECURING ROUND…" : phase === "BETTING" ? "LOCK BETS" : stateLabel}</small><b>{stake ? "DEAL CARDS" : "PLACE A BET"}</b></span>
+      <div className="rb-chip-deck"><small>CHOOSE CHIP</small><ChipSelector chips={chips} selected={selectedChip} setSelected={onChooseChip} disabled={disabled} /></div>
+      <div className="rb-bet-tools">
+        <button onClick={onClear} disabled={disabled || !bets.size} aria-label="Clear all bets"><Trash2 /><span>CLEAR</span></button>
+        <button onClick={onDouble} disabled={disabled || !bets.size} aria-label="Double current bets"><b>2×</b><span>DOUBLE</span></button>
+      </div>
+      <button
+        className="rb-deal-button"
+        data-ready={stake >= minStake && stake <= balance}
+        disabled={disabled || stake < minStake || stake > balance}
+        onClick={onPlay}
+        aria-label={stake ? `${busy ? "Securing round" : "Lock bets and deal cards"}. Bet ${stake.toLocaleString()} credits; ${possibleReturn} possible return.` : "Place a bet before dealing cards"}
+        title={stake ? `${stake.toLocaleString()} CR bet · ${possibleReturn} possible return` : "Place a bet to deal cards"}
+      >
+        <ChevronRight /><small>{stake ? compactCredits(stake) : "GO"}</small>
       </button>
+      <button className="rb-repeat-button" onClick={onRepeat} disabled={disabled} aria-label="Repeat previous bet"><RotateCcw /><span><b>Repeat</b><small>LAST BET</small></span></button>
+      <div className="rb-footer-online" aria-label={`${players.length + 1} players online`}><span aria-hidden="true"><i /><UsersRound /></span><b>online</b><small>{players.length + 1}</small></div>
     </footer>
-
-    <div className="rb-disclosure"><UsersRound /> Animated virtual table players</div>
   </main>;
 }

@@ -115,7 +115,7 @@ export function planArcheryAiShot(input: {
   const releaseDelay = Math.max(0, input.targetPhase ?? .45);
   const predictedTarget = targetPosition(input.distance, input.targetY, input.targetVelocity, estimatedFlight + releaseDelay);
   const idealAngle = solveAngleForTarget(power, input.distance, predictedTarget.y, input.windKmh);
-  const effectiveAccuracy = clamp(input.accuracy + (input.favored ? .1 : -.025), .58, .985);
+  const effectiveAccuracy = clamp(input.accuracy + (input.favored ? .16 : -.025), .58, .995);
   const spread = (1 - effectiveAccuracy) * 9;
   const miss = (random() - .5) * 2 * spread + (input.favored ? 0 : (random() < .5 ? -1 : 1) * .55);
   return { angle: clamp(idealAngle + miss, 2, 68), power, releaseDelay };

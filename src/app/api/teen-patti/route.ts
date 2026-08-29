@@ -4,6 +4,7 @@ import { ApiError, assertSameOrigin, handleRouteError, noStoreJson, parseJson } 
 import { connectDB } from "@/lib/db";
 import {
   HUMAN_PLAYER_ID,
+  TEEN_PATTI_TARGET_WIN_PERCENT,
   TEEN_PATTI_STAKES,
   activeTeenPattiPlayers,
   applyTeenPattiAction,
@@ -60,6 +61,7 @@ function plainRound(value: unknown): RoundRecord {
     turnPlayerId: String(source.turnPlayerId || ""),
     actionCount: Number(source.actionCount || 0),
     playerBetTurns: Number(source.playerBetTurns || 0),
+    aiFavored: source.aiFavored !== false,
     players: Array.isArray(source.players) ? source.players as RoundRecord["players"] : [],
     actionHistory: Array.isArray(source.actionHistory) ? source.actionHistory as RoundRecord["actionHistory"] : [],
     lastActionBatch: Array.isArray(source.lastActionBatch) ? source.lastActionBatch as RoundRecord["lastActionBatch"] : [],
@@ -91,6 +93,7 @@ function publicRound(round: RoundRecord, balance: number) {
     actionCount: round.actionCount,
     playerBetTurns: round.playerBetTurns,
     targetBetTurns: 6,
+    difficulty: { level: "VERY_HARD", targetWinPercent: TEEN_PATTI_TARGET_WIN_PERCENT },
     players: round.players.map((player) => ({
       id: player.id,
       name: player.name,
@@ -275,6 +278,7 @@ export async function POST(request: Request) {
         payout: state.payout,
         actionCount: state.actionCount,
         playerBetTurns: state.playerBetTurns,
+        aiFavored: state.aiFavored,
         turnPlayerId: state.turnPlayerId,
         players: state.players,
         actionHistory: state.actionHistory,

@@ -1,6 +1,8 @@
+import { VERY_HARD_DIFFICULTY_VERSION, VERY_HARD_PLAYER_TARGET_WIN_PERCENT } from "@/lib/gameDifficulty";
+
 export const SLOT_STAKES = [10, 25, 50, 100, 250, 500] as const;
-export const SLOT_TARGET_WIN_PERCENT = 20;
-export const SLOT_RNG_VERSION = "slots-v2-five-reel-conditioned";
+export const SLOT_TARGET_WIN_PERCENT = VERY_HARD_PLAYER_TARGET_WIN_PERCENT;
+export const SLOT_RNG_VERSION = `slots-v3-five-reel-${VERY_HARD_DIFFICULTY_VERSION}`;
 
 export type SlotStake = (typeof SLOT_STAKES)[number];
 export type SlotSymbolId = "COIN" | "EMERALD" | "RUBY" | "BELL" | "STAR" | "CROWN" | "CHEST" | "SEVEN" | "WILD" | "BONUS";
@@ -114,7 +116,7 @@ export function evaluateSlotGrid(grid: SlotGrid) {
 }
 
 /**
- * Rolls the disclosed 20% win / 80% loss decision first. Winning rounds receive
+ * Rolls the disclosed 10% win / 90% loss decision first. Winning rounds receive
  * one randomly selected complete payline; losing rounds are sampled until no
  * complete line exists. The server still owns every random choice and payout.
  */

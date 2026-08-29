@@ -84,7 +84,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "A straight number returns 36× its chip. Red/Black, Odd/Even and ranges return 2×. Dozens and columns return 3×.",
       "Zero is green and does not count as Red, Black, Odd, Even, Low or High.",
     ],
-    probabilityNote: "European single-zero wheel: each number has a 1 in 37 chance. Published returns include the original stake.",
+    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds against the placed selections. A valid single-zero wheel result is committed before the reveal; published returns include the original stake.",
   },
   "thunder-gods": {
     id: "thunder-gods",
@@ -106,7 +106,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "Eight or more matching symbols anywhere on the grid form a cluster and tumble away.",
       "Rune multipliers can amplify a winning tumble. The complete result is locked by the server before animation.",
     ],
-    probabilityNote: "Symbol weights, cluster thresholds and the maximum 100× round return are applied server-side and recorded with every round.",
+    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds. Symbol grids, cluster thresholds and the maximum 100× return are applied server-side and recorded with every round.",
   },
   "car-roulette": {
     id: "car-roulette",
@@ -135,7 +135,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "The vehicle under the final gold beam wins. Each card shows its total return.",
       "Vehicle frequency and payout are defined together and audited for each round.",
     ],
-    probabilityNote: "Higher-return cars appear less often. Exact configured weights are stored in the round RNG record.",
+    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds against the placed selections. Higher-return cars remain less frequent, and the committed result is stored in the round RNG record.",
   },
   "red-vs-black": {
     id: "red-vs-black",
@@ -164,7 +164,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "Hand rank decides the duel: straight flush, three of a kind, straight, flush, pair, then high card.",
       "Side selections win when either kingdom reveals the selected hand type.",
     ],
-    probabilityNote: "Cards are drawn without replacement from one server-shuffled 52-card deck. A tied hand pushes Red and Black selections.",
+    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds against the placed selections. Every candidate duel still uses one server-shuffled 52-card deck; tied Red or Black selections push.",
   },
   "sic-bo": {
     id: "sic-bo",
@@ -194,7 +194,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "Big and Small lose on any triple. Odd and Even use the total and also lose on any triple.",
       "Totals, doubles and any triple use the returns shown on their table areas.",
     ],
-    probabilityNote: "All three dice are independently generated from a committed server seed. Returns shown include the original stake.",
+    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds against the placed selections. All three dice come from the committed server process; returns shown include the original stake.",
   },
   "flight-x": {
     id: "flight-x",
@@ -216,7 +216,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "Press Cash Out before the aircraft reaches its hidden end point. Your return is stake × current multiplier.",
       "The end point is locked and committed before launch. Refreshing reconnects to the same round.",
     ],
-    probabilityNote: "Flight endpoints follow the disclosed seeded curve with a 3% mathematical edge and a 100× cap. The seed is revealed after settlement for audit.",
+    probabilityNote: "Very Hard mode gives roughly 10% of endpoints a path beyond 1.00×, with survival falling further at higher multipliers and a 100× cap. The seed is revealed after settlement for audit.",
   },
   "dragon-tiger": {
     id: "dragon-tiger",
@@ -242,7 +242,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "The higher rank wins. Suits do not matter.",
       "A tie pays the Tie selection. Dragon and Tiger selections push on a tie.",
     ],
-    probabilityNote: "Two cards are drawn without replacement from one server-shuffled deck. Published returns include the original stake.",
+    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds against the placed selections. Each candidate duel draws without replacement from a server-shuffled deck.",
   },
   "money-machine": {
     id: "money-machine",
@@ -264,7 +264,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "Three or more matching symbols from the left award a line return. Wild stars substitute for standard symbols.",
       "Three Bonus gifts unlock the Money Wheel and increase the same server-locked round return.",
     ],
-    probabilityNote: "Reel strips, line wins, bonus values and the maximum 100× round return are enforced and recorded server-side.",
+    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds. Reel grids, line wins, bonus values and the maximum 100× return are enforced and recorded server-side.",
   },
 };
 

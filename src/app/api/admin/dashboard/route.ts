@@ -7,10 +7,13 @@ import {
   CreditRequest,
   PenaltyMatch,
   PenaltyProfile,
+  PlayerGameStat,
   PoolMatch,
   PoolProfile,
   RaceMatch,
   RacingProfile,
+  SlotSpin,
+  TeenPattiRound,
   TowerMatch,
   TowerProfile,
   User,
@@ -37,6 +40,16 @@ function userSummary(value: unknown) {
 
 function profileMap(rows: Plain[]) {
   return new Map(rows.map((row) => [id(row.userId), row]));
+}
+
+function gameStatsMap(rows: Plain[]) {
+  const result = new Map<string, Record<string, Plain>>();
+  for (const row of rows) {
+    const userId = id(row.userId);
+    const gameId = String(row.gameId || "Unknown game");
+    result.set(userId, { ...(result.get(userId) ?? {}), [gameId]: row });
+  }
+  return result;
 }
 
 function matchRow(game: string, item: Plain) {
@@ -71,6 +84,11 @@ export async function GET() {
     const startTrend = new Date(startToday);
     startTrend.setDate(startTrend.getDate() - 13);
 
+    // A player is an authenticated account with a server-recorded game entry.
+    // Profiles and leaderboard rows can exist before a real round is played, so
+    // they must never be used to populate the admin player list.
+    const playerUserIds = await WalletTransaction.distinct("userId", { type: "RACE_ENTRY" });
+
     const [
       users,
       wallets,
@@ -82,6 +100,9 @@ export async function GET() {
       poolProfiles,
       towerProfiles,
       archeryProfiles,
+      premiumProfiles,
+      slotProfiles,
+      teenPattiProfiles,
       recentTransactions,
       creditRequests,
       auditLogs,
@@ -93,7 +114,7 @@ export async function GET() {
       matchCounts,
       dailyLedger,
     ] = await Promise.all([
-      User.find().sort({ createdAt: -1 }).lean(),
+      User.find({ _id: { $in: playerUserIds } }).sort({ createdAt: -1 }).lean(),
       Wallet.find().lean(),
       WalletTransaction.aggregate([
         {
@@ -108,6 +129,7 @@ export async function GET() {
             adminDebits: { $sum: { $cond: [{ $and: [{ $eq: ["$type", "ADMIN_ADJUSTMENT"] }, { $lt: ["$amount", 0] }] }, { $abs: "$amount" }, 0] } },
             transactionCount: { $sum: 1 },
             lastTransactionAt: { $max: "$createdAt" },
+            lastPlayedAt: { $max: { $cond: [{ $in: ["$type", ["RACE_ENTRY", "RACE_REWARD"]] }, "$createdAt", null] } },
           },
         },
       ]),
@@ -116,11 +138,36 @@ export async function GET() {
         { $group: { _id: "$userId", withdrawn: { $sum: "$amount" }, withdrawals: { $sum: 1 }, lastWithdrawalAt: { $max: "$reviewedAt" } } },
       ]),
       CreditRequest.aggregate([{ $group: { _id: { type: "$type", status: "$status" }, count: { $sum: 1 }, amount: { $sum: "$amount" } } }]),
-      RacingProfile.find().lean(),
-      PenaltyProfile.find().lean(),
-      PoolProfile.find().lean(),
-      TowerProfile.find().lean(),
-      ArcheryProfile.find().lean(),
+      RacingProfile.find({ userId: { $in: playerUserIds } }).lean(),
+      PenaltyProfile.find({ userId: { $in: playerUserIds } }).lean(),
+      PoolProfile.find({ userId: { $in: playerUserIds } }).lean(),
+      TowerProfile.find({ userId: { $in: playerUserIds } }).lean(),
+      ArcheryProfile.find({ userId: { $in: playerUserIds } }).lean(),
+      PlayerGameStat.find({ userId: { $in: playerUserIds }, rounds: { $gt: 0 } }).lean(),
+      SlotSpin.aggregate([
+        { $match: { userId: { $in: playerUserIds } } },
+        {
+          $group: {
+            _id: "$userId",
+            rounds: { $sum: 1 },
+            wins: { $sum: { $cond: [{ $in: ["$result", ["WIN", "JACKPOT"]] }, 1, 0] } },
+            losses: { $sum: { $cond: [{ $eq: ["$result", "LOSS"] }, 1, 0] } },
+            lastPlayedAt: { $max: "$completedAt" },
+          },
+        },
+      ]),
+      TeenPattiRound.aggregate([
+        { $match: { userId: { $in: playerUserIds }, status: "COMPLETED" } },
+        {
+          $group: {
+            _id: "$userId",
+            rounds: { $sum: 1 },
+            wins: { $sum: { $cond: [{ $eq: ["$winner.id", "PLAYER"] }, 1, 0] } },
+            losses: { $sum: { $cond: [{ $ne: ["$winner.id", "PLAYER"] }, 1, 0] } },
+            lastPlayedAt: { $max: "$completedAt" },
+          },
+        },
+      ]),
       WalletTransaction.find().sort({ createdAt: -1 }).limit(250).populate("userId", "username email").lean(),
       CreditRequest.find()
         .select("+details +payerMobile +recipientMobile +accountTitle +paymentProofSize +payoutProofSize")
@@ -162,6 +209,9 @@ export async function GET() {
     const poolByUser = profileMap(poolProfiles as unknown as Plain[]);
     const towerByUser = profileMap(towerProfiles as unknown as Plain[]);
     const archeryByUser = profileMap(archeryProfiles as unknown as Plain[]);
+    const premiumByUser = gameStatsMap((premiumProfiles as unknown as Plain[]).map((profile) => ({ ...profile, userId: profile.userId })));
+    const slotsByUser = profileMap((slotProfiles as unknown as Plain[]).map((profile) => ({ ...profile, userId: profile._id })));
+    const teenPattiByUser = profileMap((teenPattiProfiles as unknown as Plain[]).map((profile) => ({ ...profile, userId: profile._id })));
 
     const userRows = users.map((user) => {
       const userId = id(user._id);
@@ -174,12 +224,16 @@ export async function GET() {
         pool: poolByUser.get(userId),
         tower: towerByUser.get(userId),
         archery: archeryByUser.get(userId),
+        "777 slots": slotsByUser.get(userId),
+        "teen patti": teenPattiByUser.get(userId),
+        ...(premiumByUser.get(userId) ?? {}),
       };
       const profiles = Object.values(games).filter(Boolean) as Plain[];
       const totalWins = profiles.reduce((sum, profile) => sum + number(profile.wins), 0);
       const totalLosses = profiles.reduce((sum, profile) => sum + number(profile.losses), 0);
       const gameSpent = number(finance?.gameSpent ?? wallet?.totalWagered);
       const gameRewards = number(finance?.gameRewards ?? wallet?.totalWon);
+      const profitLoss = gameRewards - gameSpent;
       return {
         id: userId,
         username: user.username,
@@ -189,13 +243,19 @@ export async function GET() {
         dateOfBirth: user.dateOfBirth,
         status: user.status,
         createdAt: user.createdAt,
-        lastLoginAt: user.lastLoginAt,
+        // Registration creates an authenticated session too. Older accounts did
+        // not persist that first sign-in timestamp, so creation is the truthful
+        // fallback for a player who already has verified gameplay.
+        lastLoginAt: user.lastLoginAt ?? user.createdAt,
+        lastPlayedAt: finance?.lastPlayedAt ?? finance?.lastTransactionAt ?? null,
         responsiblePlay: user.responsiblePlay,
         balance: number(wallet?.balance),
         reservedBalance: number(wallet?.reservedBalance),
         gameSpent,
         gameRewards,
-        profitLoss: gameRewards - gameSpent,
+        profitLoss,
+        netProfit: Math.max(0, profitLoss),
+        netLoss: Math.max(0, -profitLoss),
         purchased: number(finance?.purchased),
         withdrawn: number(cashOut?.withdrawn),
         netFunding: number(finance?.purchased) - number(cashOut?.withdrawn),
@@ -208,7 +268,7 @@ export async function GET() {
         totalWins,
         totalLosses,
         winRate: totalWins + totalLosses ? Math.round(totalWins / (totalWins + totalLosses) * 100) : 0,
-        games: Object.fromEntries(Object.entries(games).map(([game, profile]) => [game, profile ? { wins: number(profile.wins), losses: number(profile.losses), rank: profile.rank, rankPoints: number(profile.rankPoints), xp: number(profile.xp) } : null])),
+        games: Object.fromEntries(Object.entries(games).map(([game, profile]) => [game, profile ? { rounds: number(profile.rounds) || number(profile.wins) + number(profile.losses), wins: number(profile.wins), losses: number(profile.losses), rank: profile.rank, rankPoints: number(profile.rankPoints), xp: number(profile.xp), lastPlayedAt: profile.lastPlayedAt ?? null } : null])),
       };
     });
 
@@ -217,9 +277,9 @@ export async function GET() {
     const totalReserved = wallets.reduce((sum, wallet) => sum + number(wallet.reservedBalance), 0);
     const totalWagered = userRows.reduce((sum, user) => sum + user.gameSpent, 0);
     const totalWon = userRows.reduce((sum, user) => sum + user.gameRewards, 0);
-    const purchased = userRows.reduce((sum, user) => sum + user.purchased, 0);
-    const withdrawn = userRows.reduce((sum, user) => sum + user.withdrawn, 0);
-    const adminNet = userRows.reduce((sum, user) => sum + user.adminNet, 0);
+    const purchased = financialRows.reduce((sum, row) => sum + number(row.purchased), 0);
+    const withdrawn = withdrawals.reduce((sum, row) => sum + number(row.withdrawn), 0);
+    const adminNet = financialRows.reduce((sum, row) => sum + number(row.adminNet), 0);
     const totalMatches = matchCounts.slice(0, 5).reduce((sum, count) => sum + count, 0);
     const completedMatches = matchCounts.slice(5).reduce((sum, count) => sum + count, 0);
     const recentMatches = [

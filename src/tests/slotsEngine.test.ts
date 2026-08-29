@@ -70,12 +70,12 @@ describe("777 Slots server engine", () => {
     }
   });
 
-  it("targets about 20% wins and 80% losses across a deterministic sample", () => {
+  it("targets about 10% wins and 90% losses across a deterministic sample", () => {
     const randomIndex = seededRandom(2026);
     const outcomes = Array.from({ length: 2_000 }, () => createSlotOutcome(25, randomIndex));
     const winRate = outcomes.filter((outcome) => outcome.result !== "LOSS").length / outcomes.length;
-    expect(winRate).toBeGreaterThan(0.17);
-    expect(winRate).toBeLessThan(0.23);
+    expect(winRate).toBeGreaterThan(0.08);
+    expect(winRate).toBeLessThan(0.12);
   });
 
   it("rejects an invalid RNG index", () => {
