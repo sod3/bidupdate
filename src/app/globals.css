@@ -1882,7 +1882,7 @@ select {
 }
 
 /* ========================================================================== */
-/* FLIGHT X — isolated cinematic crash table                                  */
+/* CRASH — isolated cinematic crash table                                    */
 /* ========================================================================== */
 .flight-x-table {
   --flight-green: #14f887;
@@ -1957,9 +1957,8 @@ select {
 .flight-x-history button[data-tier="hot"] { background: linear-gradient(180deg,#a63b32,#5a1717); border-color: rgba(255,132,102,.42); }
 .flight-x-history .flight-x-chart { background: linear-gradient(145deg,#2fb9df,#08718f); border-color: rgba(163,241,255,.62); }
 .flight-x-history svg { height: 21px; width: 21px; }
-.flight-x-brand { align-items: center; display: flex; filter: drop-shadow(0 0 12px rgba(53,255,169,.32)); gap: 4px; }
-.flight-x-brand span { color: rgba(219,255,242,.68); font-size: 8px; font-weight: 1000; letter-spacing: .18em; writing-mode: vertical-rl; }
-.flight-x-brand b { color: #45ffc0; font-family: Georgia,serif; font-size: 29px; line-height: 1; }
+.flight-x-brand { align-items: center; display: flex; filter: drop-shadow(0 0 12px rgba(53,255,169,.32)); }
+.flight-x-brand b { color: #45ffc0; font-family: Georgia,serif; font-size: 18px; letter-spacing: .06em; line-height: 1; }
 .flight-x-wallet {
   align-items: center;
   background: linear-gradient(180deg,rgba(10,102,56,.8),rgba(3,49,31,.92));
@@ -2188,7 +2187,7 @@ select {
   .flight-x-board { grid-template-columns: minmax(0,1.5fr) minmax(320px,.92fr); }
 }
 
-@media (max-width: 760px) {
+@media (orientation: portrait) and (max-width: 760px) {
   .flight-x-table { overflow-y: auto; }
   .flight-x-topbar { grid-template-columns: 48px minmax(0,1fr) minmax(82px,112px) 38px; height: calc(56px + env(safe-area-inset-top)); position: sticky; top: 0; }
   .flight-x-back { height: 38px; width: 48px; }.flight-x-help { height: 37px; width: 38px; }
@@ -2200,12 +2199,39 @@ select {
   .flight-bet-body { grid-template-columns:minmax(0,1fr) 105px; }.flight-bet-action { min-height:98px; }
 }
 
-@media (max-width: 430px) {
+@media (orientation: portrait) and (max-width: 430px) {
   .flight-x-topbar { grid-template-columns:44px minmax(0,1fr) 84px; padding-inline:7px; }.flight-x-help { display:none; }.flight-x-back { width:44px; }
   .flight-x-history { grid-template-columns:repeat(3,minmax(34px,1fr)) 36px; }.flight-x-history button:nth-child(4) { display:none; }
   .flight-x-wallet svg { height:16px; width:16px; }.flight-x-scene { min-height:330px; }.flight-x-signal { height:36px; width:36px; }.flight-x-signal svg { height:20px; width:20px; }
   .flight-x-console { grid-template-rows:auto 196px auto auto; }.flight-x-round-meta small { min-width:85px; }
   .flight-bet-body { gap:5px; grid-template-columns:minmax(0,1fr) 88px; }.flight-amount-stepper { grid-template-columns:40px 1fr 40px; }.flight-auto-row { gap:4px; grid-template-columns:78px 1fr; }.flight-auto-row label { padding-inline:5px; }.flight-auto-row label small { display:none; }.flight-bet-action { min-height:98px; }.flight-bet-action b { font-size:13px; }
+}
+
+/* Mobile browser chrome can leave less than 300 CSS pixels of landscape
+   height. Compact the table by height so both bet bays remain inside 100dvh. */
+@media (orientation: landscape) and (max-height: 420px) {
+  .flight-x-topbar { gap: 4px; grid-template-columns: 48px minmax(220px,1fr) minmax(86px,120px) 34px; height: calc(42px + env(safe-area-inset-top)); padding-inline: max(5px,env(safe-area-inset-left)); }
+  .flight-x-back { height: 32px; width: 46px; }.flight-x-back svg { height: 21px; width: 21px; }
+  .flight-x-help { height: 30px; width: 34px; }.flight-x-help svg { height: 18px; width: 18px; }
+  .flight-x-history { gap: 3px; grid-template-columns: repeat(4,minmax(34px,1fr)) 34px; }
+  .flight-x-history button { font-size: 8px; height: 27px; }.flight-x-history button:nth-child(5) { display: none; }.flight-x-history svg { height: 17px; width: 17px; }
+  .flight-x-wallet { height: 28px; padding-inline: 5px; }.flight-x-wallet svg { height: 15px; width: 15px; }.flight-x-wallet b { font-size: 9px; }.flight-x-wallet span { display: none; }
+  .flight-x-board { gap: 4px; grid-template-columns: minmax(0,1.42fr) minmax(300px,.96fr); height: calc(100dvh - 42px - env(safe-area-inset-top)); padding: 3px max(4px,env(safe-area-inset-right)) max(3px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left)); }
+  .flight-x-scene { border-width: 1px; }.flight-x-neon-frame { inset: 2px; }.flight-x-signal { height: 29px; width: 29px; }.flight-x-signal svg { height: 17px; width: 17px; }
+  .flight-x-stage-copy { top: 42%; }.flight-x-stage-copy h2 { font-size: clamp(20px,3vw,29px); margin-top: 3px; }.flight-x-stage-copy p { font-size: clamp(9px,1.4vw,13px); margin-top: 4px; }.flight-x-stage-copy strong { font-size: clamp(46px,9vw,78px); margin-top: 4px; }
+  .flight-x-rocket { width: clamp(78px,14vw,122px); }.flight-x-fairness { bottom: 6px; left: 8px; }
+  .flight-x-console { gap: 3px; grid-template-rows: auto minmax(30px,1fr) auto auto; }
+  .flight-x-round-meta { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); padding: 2px 5px; }.flight-x-round-meta > div { border-bottom: 0; gap: 5px; min-width: 0; padding: 2px; }.flight-x-round-meta small { font-size: 6px; min-width: auto; }.flight-x-round-meta b { font-size: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flight-x-lobby-tabs { min-height: 15px; }.flight-x-lobby-tabs b { font-size: 7px; }.flight-x-lobby-tabs span { font-size: 5px; }.flight-x-lobby-head { display: none; }.flight-x-lobby-rows > div { font-size: 7px; min-height: 14px; padding-block: 0; }.flight-x-lobby-rows i { flex-basis: 12px; font-size: 5px; height: 12px; width: 12px; }
+  .flight-bet-bay { padding: 1px 3px 3px; }.flight-bet-title { min-height: 12px; }.flight-bet-title b { font-size: 7px; }.flight-bet-title span { font-size: 5px; }
+  .flight-bet-body { gap: 3px; grid-template-columns: minmax(0,1fr) 70px; }.flight-bet-settings { gap: 2px; }
+  .flight-amount-stepper { gap: 2px; grid-template-columns: 28px 1fr 28px; min-height: 26px; }.flight-amount-stepper > div { padding-top: 7px; }.flight-amount-stepper > div small { font-size: 4px; top: 1px; }.flight-amount-stepper > div b { font-size: 10px; }.flight-amount-stepper svg { height: 14px; width: 14px; }
+  .flight-auto-row { gap: 3px; grid-template-columns: 59px minmax(70px,1fr); }.flight-auto-row > button,.flight-auto-row label { min-height: 22px; }.flight-auto-row > button { font-size: 7px; gap: 3px; }.flight-auto-row > button svg { height: 10px; width: 10px; }.flight-auto-row label { padding: 2px 4px; }.flight-auto-row label small { display: none; }.flight-auto-row input { font-size: 9px; max-width: 34px; }
+  .flight-bet-action { min-height: 50px; padding: 3px; }.flight-bet-action small { font-size: 5px; min-height: 6px; }.flight-bet-action b { font-size: 10px; margin-top: 2px; }
+}
+
+@media (orientation: portrait) and (max-width: 700px) {
+  .flight-x-table ~ .premium-rotate-device { align-items: center; backdrop-filter: blur(14px); background: rgba(3,21,28,.96); display: flex; flex-direction: column; inset: 0; justify-content: center; position: absolute; text-align: center; z-index: 150; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3504,4 +3530,17 @@ select {
   .rb-reference .rb-betting-board { height: 49%; top: 28.8%; }
   .rb-reference .rb-controls { height: calc(12% + env(safe-area-inset-bottom)); }
   .rb-ref-message { bottom: calc(11% + env(safe-area-inset-bottom)); }
+}
+
+/* Keep the complete chip deck and action button visible when Android browser
+   chrome reduces the landscape content viewport to roughly 240–420px high. */
+@media (orientation: landscape) and (max-height: 420px) {
+  .rb-reference .rb-controls { height: calc(62px + env(safe-area-inset-bottom)); padding-block: 3px max(3px,env(safe-area-inset-bottom)); }
+  .rb-reference .rb-chip-deck > small { margin-bottom: 0; }
+  .rb-reference .rb-chip-deck .premium-chip-selector { padding-block: 1px 2px; }
+  .rb-reference .rb-chip-deck .premium-chip-selector button { flex-basis: 31px; max-width: 31px; min-width: 31px; }
+  .rb-reference .rb-deal-button { min-height: 44px; }
+  .rb-reference .rb-local-avatar { height: 36px; width: 36px; }
+  .rb-ref-message { bottom: calc(62px + env(safe-area-inset-bottom)); }
+  .rb-reference .rb-coin-flight-layer { bottom: calc(62px + env(safe-area-inset-bottom)); }
 }

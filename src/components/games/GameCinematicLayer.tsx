@@ -20,7 +20,7 @@ const routePresets: Record<string, RoutePreset> = {
   "/play/car-roulette": { game: "CAR ROULETTE", kicker: "NEON CIRCUIT", center: "SELECT YOUR MACHINE", accent: "#57e6ff", accent2: "#ff48bd", icon: "race", kind: "intro" },
   "/play/red-vs-black": { game: "RED VS BLACK", kicker: "KINGDOMS AT WAR", left: "RED KINGDOM", leftMeta: "REGENT AURELIA", right: "BLACK KINGDOM", rightMeta: "SENTINEL VARYN", accent: "#ff4b55", accent2: "#b794ff", icon: "swords", kind: "versus" },
   "/play/sic-bo": { game: "SIC BO", kicker: "JADE CHAMBER", center: "SHAKE THE CHAMBER", accent: "#f6cf62", accent2: "#15c993", icon: "sparkles", kind: "intro" },
-  "/play/flight-x": { game: "FLIGHT X", kicker: "BEYOND THE HORIZON", left: "YOU", leftMeta: "PILOT", right: "X", rightMeta: "MULTIPLIER", accent: "#64dcff", accent2: "#ffb04a", icon: "plane", kind: "versus" },
+  "/play/flight-x": { game: "CRASH", kicker: "BEYOND THE HORIZON", left: "YOU", leftMeta: "PILOT", right: "MULTIPLIER", rightMeta: "CASH OUT", accent: "#64dcff", accent2: "#ffb04a", icon: "plane", kind: "versus" },
   "/play/dragon-tiger": { game: "DRAGON TIGER", kicker: "TEMPLE DUEL", left: "DRAGON", leftMeta: "JADE GUARDIAN", right: "TIGER", rightMeta: "GOLD GUARDIAN", accent: "#45edb0", accent2: "#f3c969", icon: "swords", kind: "versus" },
   "/play/money-machine": { game: "MONEY MACHINE", kicker: "VAULTWORKS NO. 5", center: "OPEN THE VAULT", accent: "#ffd566", accent2: "#20cf8b", icon: "sparkles", kind: "intro" },
 };

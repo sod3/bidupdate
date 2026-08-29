@@ -67,7 +67,7 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
     const setting = await assertGameAvailable(gameId);
 
     if (input.action === "cashout") {
-      if (gameId !== "flight-x") throw new ApiError("Cash out is only available in Flight X.", 400, "ACTION_NOT_SUPPORTED");
+      if (gameId !== "flight-x") throw new ApiError("Cash out is only available in Crash.", 400, "ACTION_NOT_SUPPORTED");
       return noStoreJson({ round: await settleFlightRound(user.userId, input.roundId, true) });
     }
 

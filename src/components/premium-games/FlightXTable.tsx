@@ -195,30 +195,30 @@ export function FlightXTable({ game, sessionId, balance, history, phase, countdo
 
   return <main className={`flight-x-table phase-${phase.toLocaleLowerCase()} ${crashed ? "is-crashed" : ""} ${cashoutPending ? "cashout-pending" : ""}`} style={{ "--flight-accent": game.accent } as React.CSSProperties}>
     <header className="flight-x-topbar">
-      <Link href="/games" className="flight-x-back" aria-label="Exit Flight X"><ArrowLeft /></Link>
+      <Link href="/games" className="flight-x-back" aria-label="Exit Crash"><ArrowLeft /></Link>
       <div className="flight-x-history" aria-label="Previous multipliers">
         {visibleHistory.map((value, index) => <button key={`${value}:${index}`} onClick={onHistory} data-tier={value >= 10 ? "hot" : value >= 2 ? "blue" : "green"}>{value.toFixed(value >= 10 ? 1 : 2)}</button>)}
         <button className="flight-x-chart" onClick={onHistory} aria-label="Open round history"><BarChart3 /></button>
       </div>
-      <div className="flight-x-brand"><span>FLIGHT</span><b>✕</b></div>
+      <div className="flight-x-brand"><b>CRASH</b></div>
       <div className="flight-x-wallet"><Coins /><b>{formatCredits(balance)}</b><span>CR</span></div>
       <button className="flight-x-help" onClick={onRules} aria-label="How to play"><CircleHelp /></button>
       <button className="flight-x-sound" onClick={onToggleMuted} aria-label={muted ? "Turn sound on" : "Mute sound"}>{muted ? <VolumeX /> : <Volume2 />}</button>
     </header>
 
     <div className="flight-x-board">
-      <section className="flight-x-scene" aria-label={`Flight X multiplier ${shownMultiplier.toFixed(2)} times`}>
+      <section className="flight-x-scene" aria-label={`Crash multiplier ${shownMultiplier.toFixed(2)} times`}>
         <Image className="flight-x-scene-art" src="/images/flight-x/alien-launch-site.png" alt="" fill priority sizes="(max-width: 760px) 100vw, 64vw" />
         <div className="flight-x-neon-frame" aria-hidden="true"><i /><i /><i /><i /></div>
         <div className="flight-x-signal"><Wifi /></div>
         <div className="flight-x-scanlines" />
         <div className="flight-x-stage-copy" aria-live="polite" aria-atomic="true">
-          {phase === "CLOSED" ? <><small>FLIGHT X</small><h2>Preparing Round</h2><p>Starting in <b>{Math.max(.1, countdown * .6).toFixed(1)}s</b></p></> :
+          {phase === "CLOSED" ? <><small>CRASH</small><h2>Preparing Round</h2><p>Starting in <b>{Math.max(.1, countdown * .6).toFixed(1)}s</b></p></> :
             cashoutPending ? <><small>CASH OUT LOCKED</small><strong>{shownMultiplier.toFixed(2)}<span>×</span></strong><p className="win-copy">CONFIRMING {formatCredits((bays[activeBay ?? 0]?.amount ?? 0) * shownMultiplier)} CR</p></> :
             active ? <><small>ROUND IN FLIGHT</small><strong>{shownMultiplier.toFixed(2)}<span>×</span></strong><p>Cash out before the flight ends</p></> :
               crashed ? <><small>FLIGHT ENDED</small><strong>{shownMultiplier.toFixed(2)}<span>×</span></strong><p className="crash-copy">CRASHED</p></> :
                 cashedOut ? <><small>CASH OUT CONFIRMED</small><strong>{shownMultiplier.toFixed(2)}<span>×</span></strong><p className="win-copy">SAFE RETURN</p></> :
-                  <><small>BEYOND THE HORIZON</small><h2>Flight X Ready</h2><p>Choose a bet bay to launch</p></>}
+                  <><small>BEYOND THE HORIZON</small><h2>Crash Ready</h2><p>Choose a bet bay to launch</p></>}
         </div>
 
         {(active || phase === "RESULT") && <svg className="flight-x-flightpath" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true"><path d="M65 555 C 250 520, 460 400, 720 125" style={{ strokeDashoffset: 790 * (1 - progress) }} /></svg>}

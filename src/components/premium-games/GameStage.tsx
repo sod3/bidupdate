@@ -112,7 +112,7 @@ function FlightStage({ multiplier, active, round }: { multiplier: number; active
       {active && <em>RETURN {Math.max(0, Math.round(shownMultiplier * 100) / 100).toFixed(2)}×</em>}
     </div>
 
-    <svg className="premium-flight-graph" viewBox="0 0 410 220" role="img" aria-label={`Flight X multiplier ${shownMultiplier.toFixed(2)} times`}>
+    <svg className="premium-flight-graph" viewBox="0 0 410 220" role="img" aria-label={`Crash multiplier ${shownMultiplier.toFixed(2)} times`}>
       <defs>
         <linearGradient id="flight-line" x1="0" x2="1"><stop stopColor="#4fe4ff"/><stop offset="1" stopColor="#ffd069"/></linearGradient>
         <linearGradient id="flight-area" x1="0" y1="0" x2="0" y2="1"><stop stopColor="#4fe4ff" stopOpacity=".24"/><stop offset="1" stopColor="#4fe4ff" stopOpacity="0"/></linearGradient>

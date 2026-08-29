@@ -76,7 +76,7 @@ export const games: GameItem[] = [
   },
   {
     id: "flight-x",
-    name: "Flight X",
+    name: "Crash",
     slug: "/play/flight-x",
     thumbnail: "/images/games/flight-x.webp",
     category: "casual",

@@ -198,7 +198,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
   },
   "flight-x": {
     id: "flight-x",
-    title: "Flight X",
+    title: "Crash",
     kicker: "Beyond the Horizon",
     icon: "✦",
     mode: "crash",
@@ -275,4 +275,3 @@ export function isPremiumGameId(value: string): value is PremiumGameId {
 export function premiumGame(id: PremiumGameId) {
   return premiumGameDefinitions[id];
 }
-

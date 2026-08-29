@@ -315,7 +315,7 @@ export async function startFlightRound(input: { userId: string; requestId: strin
     const concurrent = await GameRound.findOne({ userId: input.userId, gameId, requestId: input.requestId }).session(session).lean();
     if (concurrent) return;
     const debit = await applyWalletChange({
-      userId: input.userId, amount: -totalStake, type: "RACE_ENTRY", description: "Flight X launch", referenceId: rng.roundId,
+      userId: input.userId, amount: -totalStake, type: "RACE_ENTRY", description: "Crash launch", referenceId: rng.roundId,
       idempotencyKey: `premium:${input.userId}:${gameId}:${input.requestId}:stake`,
       metadata: { game: gameId, roundId: rng.roundId, commitment: rng.commitment, serverVerified: true },
     }, session);
@@ -377,7 +377,7 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
     let balanceAfter = Number(live.balanceAfter);
     if (livePayout > 0) {
       const reward = await applyWalletChange({
-        userId, amount: livePayout, type: "RACE_REWARD", description: `Flight X ${liveOutcome.label}`, referenceId: roundId,
+        userId, amount: livePayout, type: "RACE_REWARD", description: `Crash ${liveOutcome.label}`, referenceId: roundId,
         idempotencyKey: `premium:${userId}:${gameId}:${roundId}:payout`,
         metadata: { game: gameId, roundId, multiplier: liveCashout, serverVerified: true },
       }, session);
