@@ -36,7 +36,7 @@ export type AimPrediction = {
 
 export type PlannedShot = { angle: number; power: number; spin: SpinInput; targetNumber: number | null; bank: boolean };
 
-const POCKETS = [
+export const POCKETS = [
   { x: -1.205, z: -2.39, radius: .145 }, { x: 1.205, z: -2.39, radius: .145 },
   { x: -1.225, z: 0, radius: .135 }, { x: 1.225, z: 0, radius: .135 },
   { x: -1.205, z: 2.39, radius: .145 }, { x: 1.205, z: 2.39, radius: .145 },
@@ -106,7 +106,7 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): P
       ball.z += ball.vz * dt;
       ball.rotationX += ball.vz * dt / BALL_RADIUS;
       ball.rotationZ -= ball.vx * dt / BALL_RADIUS;
-      const drag = Math.max(0, 1 - (.31 + speed * .018) * dt);
+      const drag = Math.max(0, 1 - (.18 + .22 / Math.max(.02, speed)) * dt);
       ball.vx *= drag;
       ball.vz *= drag;
       ball.sideSpin *= Math.max(0, 1 - 1.35 * dt);
@@ -126,14 +126,14 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): P
       continue;
     }
 
-    if (Math.abs(ball.x) > TABLE_HALF_WIDTH && !nearPocketOpening(ball, "x")) {
+    if (Math.abs(ball.x) > TABLE_HALF_WIDTH && (!nearPocketOpening(ball, "x") || Math.abs(ball.x) > TABLE_HALF_WIDTH + .10)) {
       ball.x = Math.sign(ball.x) * TABLE_HALF_WIDTH;
       ball.vx = -ball.vx * .88;
       ball.vz *= .985;
       ball.sideSpin *= -.62;
       events.railHits.push(ball.number);
     }
-    if (Math.abs(ball.z) > TABLE_HALF_LENGTH && !nearPocketOpening(ball, "z")) {
+    if (Math.abs(ball.z) > TABLE_HALF_LENGTH && (!nearPocketOpening(ball, "z") || Math.abs(ball.z) > TABLE_HALF_LENGTH + .10)) {
       ball.z = Math.sign(ball.z) * TABLE_HALF_LENGTH;
       ball.vz = -ball.vz * .88;
       ball.vx *= .985;
@@ -152,9 +152,9 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): P
       const dz = right.z - left.z;
       const distance = Math.hypot(dx, dz);
       const minimum = BALL_RADIUS * 2;
-      if (distance <= 0 || distance >= minimum) continue;
-      const nx = dx / distance;
-      const nz = dz / distance;
+      if (distance >= minimum) continue;
+      const nx = distance > 1e-8 ? dx / distance : 1;
+      const nz = distance > 1e-8 ? dz / distance : 0;
       const overlap = minimum - distance;
       left.x -= nx * overlap * .5;
       left.z -= nz * overlap * .5;
@@ -165,8 +165,10 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): P
       const impulse = relative * .965;
       left.vx -= impulse * nx;
       left.vz -= impulse * nz;
+      if (left.number === 0) { left.vx += nx * left.topSpin * impulse * .22; left.vz += nz * left.topSpin * impulse * .22; left.topSpin *= .3; }
       right.vx += impulse * nx;
       right.vz += impulse * nz;
+      if (right.number === 0) { right.vx -= nx * right.topSpin * impulse * .22; right.vz -= nz * right.topSpin * impulse * .22; right.topSpin *= .3; }
       const tangentX = -nz;
       const tangentZ = nx;
       const tangential = (left.vx - right.vx) * tangentX + (left.vz - right.vz) * tangentZ;
@@ -187,7 +189,7 @@ export function ballsAreMoving(balls: PoolBallState[]) {
 export function strikeCueBall(balls: PoolBallState[], angle: number, power: number, spin: SpinInput) {
   const cue = balls.find((ball) => ball.number === 0);
   if (!cue || cue.pocketed) return false;
-  const speed = Math.max(.35, Math.min(1, power)) * MAX_SHOT_SPEED;
+  const speed = Math.max(.05, Math.min(1, power)) * MAX_SHOT_SPEED;
   cue.vx = Math.sin(angle) * speed;
   cue.vz = Math.cos(angle) * speed;
   cue.sideSpin = Math.max(-1, Math.min(1, spin.x)) * 1.8;
@@ -233,7 +235,7 @@ export function predictAim(balls: PoolBallState[], angle: number): AimPrediction
   return { endX, endZ, targetNumber: target.number, objectEndX: target.x + objectDirectionX / length * .55, objectEndZ: target.z + objectDirectionZ / length * .55 };
 }
 
-function pathClear(balls: PoolBallState[], startX: number, startZ: number, endX: number, endZ: number, ignored: Set<number>) {
+export function pathClear(balls: PoolBallState[], startX: number, startZ: number, endX: number, endZ: number, ignored: Set<number>) {
   const dx = endX - startX;
   const dz = endZ - startZ;
   const length = Math.hypot(dx, dz);
@@ -284,6 +286,7 @@ export function planAiShot(balls: PoolBallState[], group: BallGroup | null, canS
 }
 
 export function validCuePlacement(x: number, z: number, balls: PoolBallState[]) {
+  if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
   if (Math.abs(x) > TABLE_HALF_WIDTH - BALL_RADIUS || Math.abs(z) > TABLE_HALF_LENGTH - BALL_RADIUS) return false;
   return balls.every((ball) => ball.pocketed || ball.number === 0 || Math.hypot(ball.x - x, ball.z - z) >= BALL_RADIUS * 2.08);
 }

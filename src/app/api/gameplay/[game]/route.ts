@@ -3,13 +3,12 @@ import { assertSameOrigin, ApiError, handleRouteError, noStoreJson } from "@/lib
 import { requireUser } from "@/lib/session";
 import { enforceRateLimit } from "@/lib/rateLimit";
 import {
-  ArcheryMatch, ArcheryProfile, PenaltyMatch, PenaltyProfile, PoolMatch, PoolProfile,
+  ArcheryMatch, ArcheryProfile, PenaltyMatch, PenaltyProfile,
   RaceMatch, RacingProfile, TowerMatch, TowerProfile,
 } from "@/models";
 import { POST as persistRace } from "@/app/api/neon-drift/match/route";
 import { POST as persistArchery } from "@/app/api/precision-arena/match/route";
 import { POST as persistTower } from "@/app/api/tower-clash/match/route";
-import { POST as persistPool } from "@/app/api/eight-ball/match/route";
 import { POST as persistPenalty } from "@/app/api/penalty-kings/match/route";
 import { ensurePlatformData } from "@/services/bootstrapService";
 import { FICTIONAL_OPPONENT_NAMES, fictionalOpponentNameAt } from "@/lib/opponentNames";
@@ -32,9 +31,6 @@ const towerTiers = {
   frontier: { reward: 200, boss: "IRON WARDEN", title: "HIGHLAND TYRANT" },
   warfront: { reward: 1000, boss: "EMBER EMPEROR", title: "WARFRONT DESTROYER" },
   royal: { reward: 2000, boss: "THE SUN KING", title: "ROYAL CATACLYSM" },
-} as const;
-const poolTiers = {
-  club: { reward: 200 }, pro: { reward: 1000 }, "high-roller": { reward: 2000 },
 } as const;
 const penaltyTiers = {
   academy: { reward: 200 }, champions: { reward: 1000 }, "world-class": { reward: 2000 },
@@ -94,6 +90,7 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
     const { game: rawGame } = await context.params;
     if (!games.has(rawGame as Game)) throw new ApiError("Unknown game.", 404, "GAME_NOT_FOUND");
     const game = rawGame as Game;
+    if (game === "eight-ball") throw new ApiError("Use the authoritative 8 Ball table protocol.", 410, "POOL_PROTOCOL_RETIRED");
     const user = await requireUser();
     const body = await request.json() as Record<string, unknown>;
     const action = body.action;
@@ -179,23 +176,6 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
       return noStoreJson({ result: { winnerId, winnerName: won ? user.username : bot.username, xpAwarded: won ? 650 : 250, creditsAwarded: won ? match.possibleReward : 0, rankDelta: won ? 22 : -10, durationMs, profile: saved.profile } });
     }
 
-    if (game === "eight-ball") {
-      if (action === "START") {
-        const tierId = String(body.tierId || "") as keyof typeof poolTiers; if (!poolTiers[tierId]) throw new ApiError("Select a valid pool tier.", 400, "INVALID_TIER");
-        const profile = await PoolProfile.findOneAndUpdate({ userId: user.userId }, { $setOnInsert: { userId: user.userId } }, { upsert: true, new: true }).lean();
-        const bot = { id: `pool-ai-${randomUUID()}`, username: freshOpponentName(body, user.username), ...profileIdentity(profile), level: Math.max(25, profile.level + randomInt(7, 15)), isBot: true };
-        const matchId = randomUUID(); const startAt = Date.now() + 4_000; const environmentSeed = randomInt(1, 2_147_483_647); const aiFavored = hardCpuFavored();
-        await persist(request, "/api/eight-ball/match", persistPool, { phase: "START", matchId, tierId, startAt, environmentSeed, aiFavored, cueId: body.cueId, tableId: body.tableId, ballSkinId: body.ballSkinId, players: [{ id: user.userId, username: user.username }, bot] });
-        return noStoreJson({ match: { matchId, tierId, startAt, environmentSeed, opponent: bot, aiFavored } });
-      }
-      const match = await PoolMatch.findOne({ matchId: String(body.matchId || "") }).lean();
-      if (!match || !owns(match.playerIds, user.userId)) throw new ApiError("Pool match not found.", 404, "MATCH_NOT_FOUND");
-      minimumElapsed(match.startedAt, 20_000); const players = rows(match.players); const bot = players.find((player) => player.isBot);
-      if (!bot) throw new ApiError("Pool opponent is unavailable.", 409);
-      const outcome = winnerType(body.winner); const won = outcome === "PLAYER"; const winnerId = won ? user.userId : bot.id; const durationMs = Date.now() - new Date(match.startedAt).getTime();
-      const saved = await persist(request, "/api/eight-ball/match", persistPool, { phase: "RESULT", matchId: match.matchId, winnerId, stats: body.stats, durationMs, players });
-      return noStoreJson({ result: { winnerId, winnerName: won ? user.username : bot.username, xpAwarded: won ? 600 : 230, creditsAwarded: won ? match.possibleReward : 0, rankDelta: won ? 18 : -9, durationMs, profile: saved.profile } });
-    }
 
     if (action === "START") {
       const tierId = String(body.tierId || "") as keyof typeof penaltyTiers; if (!penaltyTiers[tierId]) throw new ApiError("Select a valid penalty tier.", 400, "INVALID_TIER");

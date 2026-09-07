@@ -1,3 +1,4 @@
+import { installPoolLive } from "./pool-live.mjs";
 import { createServer } from "node:http";
 import { randomInt, randomUUID } from "node:crypto";
 import next from "next";
@@ -817,8 +818,14 @@ io.use(async (socket, nextMiddleware) => {
   }
 });
 
+installPoolLive(io, port);
+
 io.on("connection", (socket) => {
   const identity = socket.data.driver;
+  socket.use(([event], nextPacket) => {
+    if (event.startsWith("pool:")) return nextPacket(new Error("Use the authoritative pool-live protocol."));
+    nextPacket();
+  });
   socket.on("match:join", async (input = {}) => {
     const tierId = typeof input.tierId === "string" ? input.tierId : "";
     const vehicleId = typeof input.vehicleId === "string" ? input.vehicleId : "";

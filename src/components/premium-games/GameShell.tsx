@@ -17,8 +17,9 @@ import { GameSessionManager, PremiumGameRequestError, ServerResultService, Trans
 import { premiumGame, type PremiumBetOption, type PremiumGameId } from "@/lib/premium-games/definitions";
 import { SoundManager, type GameSound } from "@/lib/premium-games/soundManager";
 import { triggerGameCinematic } from "@/lib/gameCinematics";
+import { createRedBlackDemoRound, type RedBlackLivePhase } from "@/lib/premium-games/redBlackLive";
 
-type RoundPhase = "BETTING" | "CLOSED" | "ANIMATING" | "RESULT";
+type RoundPhase = "BETTING" | "CLOSED" | "ANIMATING" | "RESULT" | RedBlackLivePhase;
 
 function delay(milliseconds: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
@@ -45,6 +46,7 @@ function animationSound(gameId: PremiumGameId): GameSound {
 export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const game = premiumGame(gameId);
   const wallet = useWallet();
+  const refreshWallet = wallet.refreshWallet;
   const sessionClock = useRef(new GameSessionManager());
   const [state, setState] = useState<PremiumGameState | null>(null);
   const [balance, setBalance] = useState(0);
@@ -53,6 +55,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [phase, setPhase] = useState<RoundPhase>("BETTING");
   const [countdown, setCountdown] = useState(0);
+  const [redBlackRevealStep, setRedBlackRevealStep] = useState(0);
   const [selectedChip, setSelectedChip] = useState<number>(game.chips[0]);
   const [bets, setBets] = useState<Map<string, number>>(new Map());
   const [lastBets, setLastBets] = useState<Map<string, number>>(new Map());
@@ -76,8 +79,17 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const [master, setMaster] = useState(0.7);
   const [sfx, setSfx] = useState(0.75);
   const busyRef = useRef(false);
+  const betsRef = useRef<Map<string, number>>(new Map());
+  const balanceRef = useRef(0);
+  const premiumStateRef = useRef<PremiumGameState | null>(null);
+  const redBlackLoopRef = useRef(0);
+  const redBlackWinnerRef = useRef<"RED" | "BLACK" | "TIE">("TIE");
   const singleAction = game.mode === "tumble" || game.mode === "reels" || game.mode === "crash";
   const defaultOption = game.options[0].id;
+
+  useEffect(() => { betsRef.current = bets; }, [bets]);
+  useEffect(() => { balanceRef.current = balance; }, [balance]);
+  useEffect(() => { premiumStateRef.current = state; }, [state]);
 
   const loadState = useCallback(async (signal?: AbortSignal) => {
     const payload = await ServerResultService.state(gameId, signal);
@@ -185,6 +197,135 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const limits = state?.setting ?? { minStake: game.minStake, maxStake: game.maxStake, chipDenominations: [...game.chips] };
   const controlsDisabled = phase !== "BETTING" || busy;
 
+  useEffect(() => {
+    if (gameId !== "red-vs-black") return;
+    const token = ++redBlackLoopRef.current;
+    const live = () => redBlackLoopRef.current === token;
+    const pause = async (milliseconds: number) => {
+      await delay(milliseconds);
+      return live();
+    };
+
+    const runLiveTable = async () => {
+      let firstVisibleRound = true;
+      let sequence = 0;
+
+      while (live()) {
+        if (!firstVisibleRound) {
+          const cleared = new Map<string, number>();
+          betsRef.current = cleared;
+          setBets(cleared);
+          setRound(null);
+          setRedBlackRevealStep(0);
+          setPhase("NEXT_ROUND");
+          setCountdown(0);
+          if (!await pause(520)) return;
+          setPhase("COUNTDOWN");
+          for (let value = 3; value >= 1; value -= 1) {
+            setCountdown(value);
+            SoundManager.play("count");
+            if (!await pause(820)) return;
+          }
+        }
+
+        setRound(null);
+        setRedBlackRevealStep(0);
+        setPhase("BETTING");
+        SoundManager.play("betOpen");
+        const bettingSeconds = firstVisibleRound ? 9 : 12;
+        for (let value = bettingSeconds; value >= 1; value -= 1) {
+          setCountdown(value);
+          if (value <= 3) SoundManager.play("count");
+          if (!await pause(1000)) return;
+        }
+
+        setCountdown(0);
+        setPhase("BETTING_CLOSING");
+        SoundManager.play("betClose");
+        if (!await pause(1150)) return;
+
+        const committedBets = new Map(betsRef.current);
+        const committedStake = [...committedBets.values()].reduce((sum, amount) => sum + amount, 0);
+        if (committedBets.size) setLastBets(committedBets);
+        const liveState = premiumStateRef.current;
+        const isRealWager = !!liveState && committedBets.size > 0
+          && committedStake >= liveState.setting.minStake
+          && committedStake <= liveState.setting.maxStake
+          && committedStake <= balanceRef.current;
+        let completed: CompletedPremiumRound;
+
+        if (isRealWager) {
+          busyRef.current = true;
+          setBusy(true);
+          try {
+            const response = await ServerResultService.play(
+              "red-vs-black",
+              TransactionManager.requestId("red-vs-black"),
+              TransactionManager.normalizeSelections(committedBets),
+            );
+            completed = response.round as CompletedPremiumRound;
+            balanceRef.current = completed.balance;
+            setBalance(completed.balance);
+          } catch (caught) {
+            setError(caught instanceof Error ? `${caught.message} Your spectator table will keep running.` : "The wager was not accepted. Your spectator table will keep running.");
+            completed = createRedBlackDemoRound({
+              sequence,
+              balance: balanceRef.current,
+              previousWinner: redBlackWinnerRef.current,
+            });
+          } finally {
+            busyRef.current = false;
+            setBusy(false);
+          }
+        } else {
+          completed = createRedBlackDemoRound({
+            sequence,
+            balance: balanceRef.current,
+            previousWinner: redBlackWinnerRef.current,
+          });
+        }
+        if (!live()) return;
+
+        sequence += 1;
+        redBlackWinnerRef.current = String(completed.payload.winner ?? "TIE") as "RED" | "BLACK" | "TIE";
+        setRound(completed);
+        setPhase("DEALING");
+        SoundManager.play("deal");
+        if (!await pause(900)) return;
+
+        setPhase("REVEALING");
+        for (let step = 1; step <= 6; step += 1) {
+          setRedBlackRevealStep(step);
+          SoundManager.play("flip");
+          if (!await pause(520)) return;
+        }
+
+        setPhase("RESULT");
+        SoundManager.play("impact");
+        if (!await pause(3400)) return;
+
+        setPhase("PAYOUT");
+        SoundManager.play("payout");
+        if (!await pause(1550)) return;
+
+        if (isRealWager && completed.payload.demo !== true) {
+          SoundManager.play(completed.result === "WIN" ? "win" : "loss");
+          void refreshWallet();
+          void loadState().catch(() => null);
+        }
+
+        setPhase("ROUND_END");
+        if (!await pause(720)) return;
+        firstVisibleRound = false;
+      }
+    };
+
+    void runLiveTable();
+    return () => {
+      if (redBlackLoopRef.current === token) redBlackLoopRef.current += 1;
+    };
+  }, [gameId, loadState, refreshWallet]);
+
   const chooseChip = (chip: number) => {
     setSelectedChip(chip);
     if (singleAction && phase === "BETTING") setBets(new Map([[defaultOption, chip]]));
@@ -202,8 +343,9 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
         if (amount > 0) next.set(option.id, amount); else next.delete(option.id);
       } else {
         const currentTotal = [...current.values()].reduce((sum, amount) => sum + amount, 0);
-        if (currentTotal + selectedChip > limits.maxStake || currentTotal + selectedChip > balance) {
-          setError(currentTotal + selectedChip > balance ? "Not enough credits for that chip." : `Maximum total stake is ${limits.maxStake.toLocaleString()} CR.`);
+        const walletLimitApplies = gameId !== "red-vs-black" || premiumStateRef.current !== null;
+        if (currentTotal + selectedChip > limits.maxStake || (walletLimitApplies && currentTotal + selectedChip > balance)) {
+          setError(walletLimitApplies && currentTotal + selectedChip > balance ? "Not enough credits for that chip." : `Maximum total stake is ${limits.maxStake.toLocaleString()} CR.`);
           return current;
         }
         next.set(option.id, existing + selectedChip);
@@ -346,7 +488,8 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
 
   const repeat = () => {
     const amount = [...lastBets.values()].reduce((sum, value) => sum + value, 0);
-    if (!lastBets.size || amount > balance || amount > limits.maxStake) return;
+    const walletLimitApplies = gameId !== "red-vs-black" || premiumStateRef.current !== null;
+    if (!lastBets.size || (walletLimitApplies && amount > balance) || amount > limits.maxStake) return;
     setBets(new Map(lastBets));
     SoundManager.play("chip");
   };
@@ -359,6 +502,47 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   };
 
   const reconnect = useCallback(() => { void loadState().catch(() => null); }, [loadState]);
+
+  const toggleSound = () => {
+    const nextMuted = !muted;
+    SoundManager.setSettings({ muted: nextMuted, master, sfx });
+    setMuted(nextMuted);
+    if (!nextMuted) SoundManager.play("betOpen");
+  };
+
+  if (gameId === "red-vs-black") return <GameErrorBoundary><ResponsiveGameLayout>
+    <RedBlackTable
+      game={game}
+      artwork={state?.setting.artwork || game.thumbnail}
+      balance={balance}
+      username={wallet.user.role === "USER" ? wallet.user.username : "GUEST PLAYER"}
+      stake={totalStake}
+      possibleReturn={possibleReturn}
+      history={state?.history ?? []}
+      phase={phase as RedBlackLivePhase}
+      countdown={countdown}
+      revealStep={redBlackRevealStep}
+      round={round}
+      bets={bets}
+      selectedChip={selectedChip}
+      chips={limits.chipDenominations}
+      disabled={controlsDisabled}
+      busy={busy}
+      minStake={limits.minStake}
+      muted={muted}
+      onToggleMuted={toggleSound}
+      onRules={() => setRulesOpen(true)}
+      onHistory={() => setHistoryOpen(true)}
+      onSelect={selectOption}
+      onChooseChip={chooseChip}
+      onClear={() => setBets(new Map())}
+      onRepeat={repeat}
+      onDouble={double}
+    />
+    {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}
+    {rulesOpen && <GameRulesModal game={game} close={() => setRulesOpen(false)} />}
+    {historyOpen && <ResultHistory items={state?.history ?? []} close={() => setHistoryOpen(false)} />}
+  </ResponsiveGameLayout></GameErrorBoundary>;
 
   if (!ready) return <LoadingScreen game={game} progress={progress} />;
   if (loadError) return <main className="premium-login-gate"><section><AlertTriangle /><h1>GAME UNAVAILABLE</h1><p>{loadError}</p><button onClick={() => location.reload()}>TRY AGAIN</button><Link className="back" href="/games">Back to games</Link></section></main>;
@@ -382,7 +566,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
       sessionId={state.sessionId}
       balance={balance}
       history={state.history ?? []}
-      phase={phase}
+      phase={phase as "BETTING" | "CLOSED" | "ANIMATING" | "RESULT"}
       countdown={countdown}
       round={round}
       active={stageActive}
@@ -402,43 +586,6 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
       onCashout={() => void cashOut()}
     />
     {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}
-    {rulesOpen && <GameRulesModal game={game} close={() => setRulesOpen(false)} />}
-    {historyOpen && <ResultHistory items={state.history ?? []} close={() => setHistoryOpen(false)} />}
-    <ReconnectHandler onReconnect={reconnect} />
-  </ResponsiveGameLayout></GameErrorBoundary>;
-
-  if (gameId === "red-vs-black") return <GameErrorBoundary><ResponsiveGameLayout>
-    <RedBlackTable
-      game={game}
-      artwork={state.setting.artwork || game.thumbnail}
-      balance={balance}
-      stake={totalStake}
-      possibleReturn={possibleReturn}
-      history={state.history ?? []}
-      phase={phase}
-      countdown={countdown}
-      round={round}
-      active={stageActive}
-      revealed={resultRevealed}
-      bets={bets}
-      selectedChip={selectedChip}
-      chips={limits.chipDenominations}
-      disabled={controlsDisabled}
-      busy={busy}
-      minStake={limits.minStake}
-      muted={muted}
-      onToggleMuted={() => setMuted(!muted)}
-      onRules={() => setRulesOpen(true)}
-      onHistory={() => setHistoryOpen(true)}
-      onSelect={selectOption}
-      onChooseChip={chooseChip}
-      onClear={() => setBets(new Map())}
-      onRepeat={repeat}
-      onDouble={double}
-      onPlay={() => void runRound()}
-    />
-    {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}
-    {celebrating && round && (round.result === "WIN" ? <WinAnimation round={round} skip={continueRound} /> : <LossAnimation round={round} skip={continueRound} />)}
     {rulesOpen && <GameRulesModal game={game} close={() => setRulesOpen(false)} />}
     {historyOpen && <ResultHistory items={state.history ?? []} close={() => setHistoryOpen(false)} />}
     <ReconnectHandler onReconnect={reconnect} />

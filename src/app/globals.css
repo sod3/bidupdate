@@ -4096,3 +4096,577 @@ select {
   .rb-reference .rb-chip-deck .premium-chip-selector button { flex-basis: clamp(36px,5vw,42px); max-width: clamp(36px,5vw,42px); min-width: clamp(36px,5vw,42px); }
   .rb-reference .rb-deal-button { min-height: 0; }
 }
+
+/* Red vs Black live-table state machine and cinematic layers. */
+.rb-live-table { --rb-live-gold:#f9d675; --rb-live-teal:#08696a; }
+.rb-live-table ~ .premium-rotate-device { display: none !important; }
+.rb-live-table::after {
+  background: radial-gradient(ellipse at 50% 40%,transparent 36%,rgba(8,2,18,.28) 72%,rgba(3,1,9,.62));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 3;
+}
+.rb-live-table .rb-backdrop { position: absolute; }
+.rb-live-table .rb-ref-hud,.rb-live-table .rb-ref-sound,.rb-live-table .rb-results,.rb-live-table .rb-player-rail,.rb-live-table .rb-house-pot,.rb-live-table .rb-table,.rb-live-table .rb-controls { z-index: 10; }
+
+.rb-live-flight-layer { inset: 0; overflow: hidden; pointer-events: none; position: absolute !important; z-index: 68 !important; }
+.rb-live-flight-layer > i {
+  align-items: center;
+  animation: rbLiveChipFlight .72s cubic-bezier(.18,.72,.21,1) both;
+  background: repeating-conic-gradient(#fff2af 0 8deg,#c91637 8deg 16deg);
+  border: 2px solid #ffe9a6;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px #94152c,inset 0 0 0 4px rgba(255,255,255,.38),0 5px 10px rgba(0,0,0,.82),0 0 16px rgba(249,214,117,.44);
+  color: #fff8df;
+  display: flex;
+  font-size: clamp(4px,.45vw,7px);
+  font-style: normal;
+  height: clamp(25px,2.45vw,38px);
+  justify-content: center;
+  left: var(--from-x);
+  position: absolute;
+  top: var(--from-y);
+  width: clamp(25px,2.45vw,38px);
+}
+.rb-live-flight-layer > i::after { background: linear-gradient(90deg,transparent,rgba(255,255,255,.78),transparent); content:""; height:2px; position:absolute; right:calc(100% + 5px); top:48%; width:30px; }
+.rb-live-flight-layer > i b,.rb-live-landed-pool > i b { align-items:center; background:rgba(83,8,23,.82); border:1px solid rgba(255,255,255,.44); border-radius:50%; display:flex; height:55%; justify-content:center; width:55%; }
+.rb-live-flight-layer > i[data-user="true"] { box-shadow: inset 0 0 0 3px #8b5d11,inset 0 0 0 4px rgba(255,255,255,.46),0 5px 10px #000,0 0 24px #ffd35e; filter:brightness(1.16); }
+
+.rb-live-flight-layer > i[data-chip="1"],.rb-live-landed-pool > i[data-chip="1"] { background:repeating-conic-gradient(#e8f2ff 0 8deg,#2f76c8 8deg 16deg); border-color:#e8f4ff; box-shadow:inset 0 0 0 3px #245f9f,inset 0 0 0 4px rgba(255,255,255,.38),0 3px 7px #000; }
+.rb-live-flight-layer > i[data-chip="2"],.rb-live-landed-pool > i[data-chip="2"] { background:repeating-conic-gradient(#f2ffd8 0 8deg,#49ae3e 8deg 16deg); border-color:#edffd0; box-shadow:inset 0 0 0 3px #35852f,inset 0 0 0 4px rgba(255,255,255,.38),0 3px 7px #000; }
+.rb-live-flight-layer > i[data-chip="3"],.rb-live-landed-pool > i[data-chip="3"] { background:repeating-conic-gradient(#fff1b1 0 8deg,#d78820 8deg 16deg); border-color:#fff2b7; box-shadow:inset 0 0 0 3px #a86616,inset 0 0 0 4px rgba(255,255,255,.38),0 3px 7px #000; }
+.rb-live-flight-layer > i[data-chip="4"],.rb-live-landed-pool > i[data-chip="4"] { background:repeating-conic-gradient(#f5dcff 0 8deg,#9746b8 8deg 16deg); border-color:#f4ddff; box-shadow:inset 0 0 0 3px #713388,inset 0 0 0 4px rgba(255,255,255,.38),0 3px 7px #000; }
+.rb-live-flight-layer > i[data-chip="5"],.rb-live-landed-pool > i[data-chip="5"] { background:repeating-conic-gradient(#d9ffff 0 8deg,#2daeb3 8deg 16deg); border-color:#d9ffff; box-shadow:inset 0 0 0 3px #247f84,inset 0 0 0 4px rgba(255,255,255,.38),0 3px 7px #000; }
+.rb-live-flight-layer > i[data-chip="6"],.rb-live-landed-pool > i[data-chip="6"] { background:repeating-conic-gradient(#fff2af 0 8deg,#b68d25 8deg 16deg); border-color:#fff4bc; box-shadow:inset 0 0 0 3px #876817,inset 0 0 0 4px rgba(255,255,255,.38),0 3px 7px #000; }
+
+.rb-live-landed-pool { inset:0; overflow:hidden; pointer-events:none; position:absolute; z-index:3; }
+.rb-live-landed-pool > i {
+  align-items:center;
+  animation:rbLiveChipLand .3s cubic-bezier(.17,.8,.24,1.36) both;
+  background:repeating-conic-gradient(#fff1a7 0 8deg,#cb173a 8deg 16deg);
+  border:2px solid #ffe8a5;
+  border-radius:50%;
+  box-shadow:inset 0 0 0 3px #9a1731,inset 0 0 0 4px rgba(255,255,255,.35),0 3px 6px rgba(0,0,0,.82);
+  color:#fff6d4;
+  display:flex;
+  font-size:clamp(3px,.35vw,6px);
+  font-style:normal;
+  height:clamp(21px,2.15vw,34px);
+  justify-content:center;
+  left:var(--chip-x);
+  position:absolute;
+  top:var(--chip-y);
+  transform:translate(-50%,-50%) rotate(var(--chip-r));
+  width:clamp(21px,2.15vw,34px);
+}
+.phase-payout .rb-live-landed-pool > i { animation:rbLiveTableClear .7s cubic-bezier(.5,0,.9,.45) both; }
+.phase-round_end .rb-live-landed-pool > i { opacity:0; }
+
+.rb-live-announcement {
+  align-items:center;
+  background:linear-gradient(90deg,transparent,rgba(5,65,59,.88) 23%,rgba(5,83,74,.96) 50%,rgba(5,65,59,.88) 77%,transparent);
+  display:flex;
+  flex-direction:column;
+  left:18%;
+  pointer-events:none;
+  position:absolute !important;
+  right:18%;
+  top:47%;
+  transform:translateY(-50%);
+  z-index:73 !important;
+}
+.rb-live-announcement::before,.rb-live-announcement::after { background:linear-gradient(90deg,transparent,#f9d675,transparent); content:""; height:1px; left:0; position:absolute; right:0; }
+.rb-live-announcement::before { top:0; }.rb-live-announcement::after { bottom:0; }
+.rb-live-announcement small { color:#fff0ad; font-size:clamp(6px,.7vw,10px); font-weight:1000; letter-spacing:.22em; margin-top:8px; }
+.rb-live-announcement strong { color:#fff4c7; filter:drop-shadow(0 0 11px rgba(249,214,117,.75)); font-family:Georgia,"Times New Roman",serif; font-size:clamp(30px,5.3vw,80px); line-height:1; padding:9px 0 12px; text-shadow:0 3px 0 #573207,0 0 24px #d59b35; }
+.rb-live-announcement span { color:#dffdf1; font-size:clamp(7px,.85vw,13px); font-weight:1000; letter-spacing:.17em; margin:-8px 0 9px; }
+.rb-live-announcement[data-phase="BETTING"] { animation:rbLiveStarting 1.45s ease-out forwards; }
+.rb-live-announcement[data-phase="BETTING_CLOSING"] { animation:rbLiveStop 1.12s ease-out both; background:linear-gradient(90deg,transparent,rgba(58,5,18,.94) 23%,rgba(116,11,34,.98) 50%,rgba(58,5,18,.94) 77%,transparent); }
+.rb-live-announcement[data-phase="BETTING_CLOSING"] strong { color:#fff; text-shadow:0 3px 0 #5e0718,0 0 28px #ff3e58; }
+.rb-live-announcement[data-phase="COUNTDOWN"],.rb-live-announcement[data-phase="NEXT_ROUND"] { background:linear-gradient(90deg,transparent,rgba(15,7,24,.9) 25%,rgba(28,12,38,.96) 50%,rgba(15,7,24,.9) 75%,transparent); }
+.rb-live-announcement[data-phase="COUNTDOWN"] strong { animation:rbLiveCountdown .8s ease-out both; font-size:clamp(58px,10vw,150px); padding:3px 0 8px; }
+.rb-live-announcement[data-phase="DEALING"] { animation:rbLiveDealMessage .88s ease-out both; }
+
+.rb-live-card-row { align-items:center; display:flex; height:100%; justify-content:center; width:100%; }
+.rb-live-card-row > .black-hand,.rb-live-card-row > .red-hand { display:flex; gap:clamp(5px,.65vw,10px); justify-content:center; width:43.5%; }
+.rb-live-card-vs { align-items:center; color:#f6cd68; display:flex; flex-direction:column; font-family:Georgia,"Times New Roman",serif; font-style:italic; justify-content:center; text-shadow:0 0 15px #df9227; width:13%; }
+.rb-live-card-vs small { font-family:Arial,sans-serif; font-size:clamp(4px,.42vw,6px); font-style:normal; letter-spacing:.14em; }
+.rb-live-card-vs b { font-size:clamp(15px,1.8vw,28px); }
+.rb-live-card { opacity:1; transform-origin:center top; }
+.phase-next_round .rb-live-card,.phase-countdown .rb-live-card { opacity:0; transform:translateY(-65px) scale(.72); }
+.phase-betting .rb-live-card { animation:rbLiveCardDeal .68s calc(var(--deal-index) * .09s) cubic-bezier(.16,.78,.2,1) both; }
+.phase-round_end .rb-live-card { animation:rbLiveCardExit .55s calc(var(--deal-index) * .035s) ease-in both; }
+.phase-revealing .rb-live-card.revealed .premium-card-inner { animation:rbLiveFlipFlash .72s ease both; }
+.phase-result .rb-live-card[data-side="RED"],.phase-payout .rb-live-card[data-side="RED"] { filter:brightness(.72) saturate(.72); }
+.rb-live-table[data-winner="RED"].phase-result .rb-live-card[data-side="RED"],.rb-live-table[data-winner="RED"].phase-payout .rb-live-card[data-side="RED"],.rb-live-table[data-winner="BLACK"].phase-result .rb-live-card[data-side="BLACK"],.rb-live-table[data-winner="BLACK"].phase-payout .rb-live-card[data-side="BLACK"] { filter:brightness(1.25) drop-shadow(0 0 13px #ffd66b); }
+.rb-live-table[data-winner="BLACK"].phase-result .rb-live-card[data-side="RED"],.rb-live-table[data-winner="BLACK"].phase-payout .rb-live-card[data-side="RED"] { filter:brightness(.62) saturate(.58); }
+
+.rb-live-duel-cinematic {
+  animation:rbLiveCinematicIn .62s cubic-bezier(.18,.8,.18,1) both;
+  background:linear-gradient(90deg,rgba(3,2,12,.08),rgba(8,3,18,.42) 48% 52%,rgba(3,2,12,.08)),var(--rb-scene) center top/cover no-repeat;
+  border-block:2px solid rgba(249,214,117,.7);
+  box-shadow:0 0 0 999px rgba(4,2,11,.52),inset 0 0 70px rgba(5,2,16,.55),0 0 40px rgba(249,214,117,.24);
+  inset:13% 7% 13%;
+  overflow:hidden;
+  pointer-events:none;
+  position:absolute !important;
+  z-index:85 !important;
+}
+.rb-live-duel-cinematic::after { animation:rbLiveLightSweep 1.1s .18s ease-out both; background:linear-gradient(105deg,transparent 36%,rgba(255,244,184,.48) 49%,transparent 61%); content:""; inset:0; position:absolute; transform:translateX(-90%); }
+.rb-live-king { bottom:11%; display:flex; flex-direction:column; position:absolute; width:35%; z-index:3; }
+.rb-live-king.black { align-items:flex-start; left:5%; }.rb-live-king.red { align-items:flex-end; right:5%; }
+.rb-live-king span { color:#e8d7c2; font-size:clamp(7px,.86vw,13px); font-weight:1000; letter-spacing:.19em; }
+.rb-live-king b { color:#fff8e5; font-family:Georgia,"Times New Roman",serif; font-size:clamp(18px,2.6vw,40px); margin-top:3px; text-shadow:0 3px 8px #000; }
+.rb-live-king small { color:#c7b8cf; font-size:clamp(6px,.68vw,10px); font-weight:900; letter-spacing:.12em; margin-top:4px; }
+.rb-live-king.red span,.rb-live-king.red small { color:#ff9ca7; }
+.rb-live-duel-cinematic[data-winner="BLACK"] .rb-live-king.black,.rb-live-duel-cinematic[data-winner="RED"] .rb-live-king.red { animation:rbLiveWinnerKing 1s .55s ease-out both; }
+.rb-live-duel-cinematic[data-winner="BLACK"] .rb-live-king.red,.rb-live-duel-cinematic[data-winner="RED"] .rb-live-king.black { filter:grayscale(.5) brightness(.56); }
+.rb-live-versus { align-items:center; display:flex; flex-direction:column; left:50%; position:absolute; top:40%; transform:translate(-50%,-50%); z-index:5; }
+.rb-live-versus small { color:#fff1ac; font-size:clamp(6px,.7vw,10px); font-weight:1000; letter-spacing:.2em; }
+.rb-live-versus strong { animation:rbLiveVsImpact .68s .18s cubic-bezier(.14,.9,.2,1.2) both; background:linear-gradient(#fff7c9,#ffc947 42%,#a94f08 75%); background-clip:text; color:transparent; filter:drop-shadow(0 5px 0 #4b1c04) drop-shadow(0 0 18px #ffba35); font-family:Georgia,"Times New Roman",serif; font-size:clamp(62px,10vw,148px); font-style:italic; line-height:.86; }
+.rb-live-versus i { animation:rbLiveImpactRing 1s .18s ease-out both; border:2px solid #ffd763; border-radius:50%; height:90px; left:50%; position:absolute; top:55%; transform:translate(-50%,-50%); width:90px; }
+.rb-live-duel-cinematic h2 { animation:rbLiveWinnerTitle .6s .86s ease-out both; bottom:4%; color:#fff6d3; font-family:Georgia,"Times New Roman",serif; font-size:clamp(20px,3.2vw,49px); left:50%; letter-spacing:.04em; position:absolute; text-shadow:0 3px 0 #681123,0 0 24px #ff5266; transform:translateX(-50%); white-space:nowrap; z-index:7; }
+.rb-live-duel-cinematic[data-winner="BLACK"] h2 { text-shadow:0 3px 0 #15121d,0 0 24px #a99bbb; }
+
+.rb-live-payout { inset:0; overflow:hidden; pointer-events:none; position:absolute !important; z-index:78 !important; }
+.rb-live-payout > i { animation:rbLivePayout 1.3s calc(var(--pay-index) * .022s) cubic-bezier(.18,.7,.3,1) both; background:radial-gradient(circle at 35% 30%,#fff3a6,#d49a24 58%,#6e3c06); border:2px solid #fff0a0; border-radius:50%; box-shadow:inset 0 0 0 3px #8a5b12,0 4px 8px #000,0 0 12px #ffc94f; height:clamp(19px,2vw,31px); left:50%; position:absolute; top:56%; width:clamp(19px,2vw,31px); }
+.rb-live-payout > strong { animation:rbLivePayoutTitle 1.45s ease both; color:#fff2ab; font-family:Georgia,"Times New Roman",serif; font-size:clamp(20px,3.5vw,52px); left:50%; position:absolute; text-shadow:0 3px 0 #684105,0 0 24px #ffc94f; top:46%; transform:translate(-50%,-50%); white-space:nowrap; }
+.rb-live-payout[data-user-win="true"] > strong { color:#ecffe9; text-shadow:0 3px 0 #27620e,0 0 26px #75ff62; }
+
+.rb-live-table .rb-player-seat[data-winning="true"] .rb-player-avatar { animation:rbLiveSeatWinner .75s ease-in-out infinite alternate; }
+.rb-live-table.phase-result .rb-player-seat:not([data-winning="true"]),.rb-live-table.phase-payout .rb-player-seat:not([data-winning="true"]) { filter:brightness(.58) saturate(.7); }
+.rb-live-table .rb-table-timer[data-phase="COUNTDOWN"],.rb-live-table .rb-table-timer[data-phase="NEXT_ROUND"] { filter:hue-rotate(18deg); }
+.rb-live-table .rb-table-timer[data-phase="BETTING_CLOSING"] { animation:rbTimerPulse .4s ease-in-out infinite; filter:hue-rotate(-32deg) saturate(1.35); }
+.rb-live-table .rb-table-timer[data-phase="RESULT"],.rb-live-table .rb-table-timer[data-phase="PAYOUT"] { animation:rbTimerPulse .7s ease-in-out infinite; filter:hue-rotate(45deg); }
+.rb-live-table .rb-deal-button.rb-live-auto { align-items:center; cursor:default; display:flex; flex-direction:column; height:clamp(49px,5.2vw,72px); justify-content:center; padding:0; position:relative; width:clamp(49px,5.2vw,72px); }
+.rb-live-table .rb-live-auto > i { animation:premiumPulse 1s ease-in-out infinite; background:#47ef9e; border:1px solid #d9ffea; border-radius:50%; box-shadow:0 0 10px #47ef9e; height:7px; position:absolute; right:8px; top:7px; width:7px; }
+.rb-live-table .rb-live-auto > b { color:#3d1d02; font-family:Georgia,"Times New Roman",serif; font-size:clamp(11px,1.35vw,20px); line-height:1; }
+.rb-live-table .rb-live-auto > small { bottom:5px; color:#5a2d06; font-size:clamp(4px,.4vw,6px); font-weight:1000; letter-spacing:.08em; position:absolute; }
+.rb-live-connecting { align-items:center; backdrop-filter:blur(8px); background:rgba(4,8,13,.78); border:1px solid rgba(249,214,117,.28); border-radius:999px; color:#ffe8a4; display:flex; font-size:8px; font-weight:1000; gap:8px; left:50%; letter-spacing:.14em; padding:9px 15px; position:absolute; top:9%; transform:translateX(-50%); z-index:110; }
+.rb-live-connecting::before { animation:premiumPulse 1s ease-in-out infinite; background:#4affaa; border:1px solid #d9ffea; border-radius:50%; box-shadow:0 0 9px #4affaa; content:""; height:7px; width:7px; }
+.rb-live-gate { background:rgba(3,2,9,.68) !important; inset:0; min-height:0; position:absolute; z-index:130; }
+
+@keyframes rbLiveChipFlight { 0%{opacity:0;transform:translate3d(0,0,0) rotate(-35deg) scale(.45)} 12%{opacity:1} 72%{transform:translate3d(calc(var(--fly-x) * .86),calc(var(--fly-y) - 7vh),0) rotate(calc(var(--fly-r) * .8)) scale(1.06)} 88%{transform:translate3d(var(--fly-x),calc(var(--fly-y) + 1.2vh),0) rotate(var(--fly-r)) scale(1.13)} 100%{opacity:1;transform:translate3d(var(--fly-x),var(--fly-y),0) rotate(var(--fly-r)) scale(1)} }
+@keyframes rbLiveChipLand { from{opacity:0;transform:translate(-50%,-90%) rotate(calc(var(--chip-r) - 45deg)) scale(.5)} 70%{transform:translate(-50%,-43%) rotate(calc(var(--chip-r) + 4deg)) scale(1.16)} to{opacity:1;transform:translate(-50%,-50%) rotate(var(--chip-r)) scale(1)} }
+@keyframes rbLiveTableClear { 0%{opacity:1;transform:translate(-50%,-50%) rotate(var(--chip-r)) scale(1)} 35%{opacity:1;transform:translate(-50%,-100%) rotate(calc(var(--chip-r) + 90deg)) scale(1.08)} 100%{opacity:0;transform:translate(-50%,-330%) rotate(calc(var(--chip-r) + 430deg)) scale(.55)} }
+@keyframes rbLiveStarting { 0%{opacity:0;transform:translateY(-50%) scaleX(.25);filter:blur(12px)} 19%{opacity:1;transform:translateY(-50%) scaleX(1.04);filter:blur(0)} 34%,68%{opacity:1;transform:translateY(-50%) scaleX(1)} 100%{opacity:0;transform:translateY(-50%) scale(1.08);visibility:hidden} }
+@keyframes rbLiveStop { 0%{opacity:0;transform:translateY(-50%) scale(1.8) rotate(-3deg);filter:blur(7px)} 24%{opacity:1;transform:translateY(-50%) scale(.97) rotate(1deg);filter:blur(0)} 38%,78%{opacity:1;transform:translateY(-50%) scale(1) rotate(0)} 100%{opacity:0;transform:translateY(-50%) scale(.98)} }
+@keyframes rbLiveCountdown { from{opacity:0;filter:blur(8px);transform:scale(2.2)} 25%,72%{opacity:1;filter:blur(0);transform:scale(1)} to{opacity:0;filter:blur(5px);transform:scale(.7)} }
+@keyframes rbLiveDealMessage { 0%{opacity:0;transform:translateY(-50%) scaleX(.2)} 35%,72%{opacity:1;transform:translateY(-50%) scaleX(1)} 100%{opacity:0;transform:translateY(-50%) scaleX(1.08)} }
+@keyframes rbLiveCardDeal { from{opacity:0;transform:translateY(-72px) rotate(-16deg) scale(.72)} to{opacity:1;transform:translateY(0) rotate(0) scale(1)} }
+@keyframes rbLiveCardExit { to{opacity:0;transform:translateY(-65px) rotate(13deg) scale(.72)} }
+@keyframes rbLiveFlipFlash { 0%,100%{filter:none} 52%{filter:brightness(1.8) drop-shadow(0 0 11px #fff2a1)} }
+@keyframes rbLiveCinematicIn { from{opacity:0;filter:blur(9px);transform:scale(1.2)} 70%{opacity:1;filter:blur(0);transform:scale(.985)} to{opacity:1;transform:scale(1)} }
+@keyframes rbLiveLightSweep { to{transform:translateX(90%)} }
+@keyframes rbLiveVsImpact { from{opacity:0;transform:scale(3.4) rotate(-14deg);filter:blur(10px)} 68%{opacity:1;transform:scale(.92) rotate(2deg);filter:blur(0)} to{opacity:1;transform:scale(1) rotate(0)} }
+@keyframes rbLiveImpactRing { from{opacity:1;transform:translate(-50%,-50%) scale(.15)} to{opacity:0;transform:translate(-50%,-50%) scale(5)} }
+@keyframes rbLiveWinnerTitle { from{opacity:0;filter:blur(7px);transform:translate(-50%,45px) scale(1.8)} to{opacity:1;filter:blur(0);transform:translate(-50%,0) scale(1)} }
+@keyframes rbLiveWinnerKing { from{filter:brightness(.8)} to{filter:brightness(1.35) saturate(1.22) drop-shadow(0 0 24px #ffd56c)} }
+@keyframes rbLivePayout { 0%{opacity:0;transform:translate3d(0,0,0) rotate(0) scale(.4)} 15%{opacity:1} 55%{transform:translate3d(calc(var(--pay-x) * .35),calc(var(--pay-y) * .35 - 12vh),0) rotate(360deg) scale(1.08)} 100%{opacity:0;transform:translate3d(var(--pay-x),var(--pay-y),0) rotate(920deg) scale(.65)} }
+@keyframes rbLivePayoutTitle { 0%,100%{opacity:0;transform:translate(-50%,-50%) scale(.72)} 18%,75%{opacity:1;transform:translate(-50%,-50%) scale(1)} }
+@keyframes rbLiveSeatWinner { to{box-shadow:inset 0 0 0 2px #281507,0 5px 9px #000,0 0 0 3px #f9d675,0 0 26px #ffd55e;filter:brightness(1.25)} }
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-live-table *,.rb-live-table *::before,.rb-live-table *::after { animation-duration:.01ms !important; animation-delay:0ms !important; }
+}
+
+@media (orientation: portrait) {
+  .rb-live-table .rb-ref-hud { inset:8px 10px auto; }
+  .rb-live-table .rb-ref-round-control,.rb-live-table .rb-ref-sound { border-radius:8px; height:36px; width:36px; }
+  .rb-live-table .rb-ref-sound { right:58px; top:8px; }
+  .rb-live-table .rb-ref-wifi { height:34px; width:34px; }
+  .rb-live-table .rb-results { height:49px; left:50%; top:7%; width:78%; }
+  .rb-live-table .rb-result-lamps { height:13px; }.rb-live-table .rb-result-lamps i { height:11px; width:11px; }
+  .rb-live-table .rb-result-labels { margin-top:2px; }.rb-live-table .rb-result-labels span { font-size:4px; height:18px; }
+  .rb-live-table .rb-results > button { bottom:3px; right:3px; top:3px; width:32px; }
+  .rb-live-table .rb-duel-display { height:10%; inset:14% 8% auto; }
+  .rb-live-table .rb-live-card-row > div { gap:3px; }
+  .rb-live-table .premium-playing-card { height:50px; width:33px; }
+  .rb-live-table .premium-card-front { padding:3px; }.rb-live-table .premium-card-front b,.rb-live-table .premium-card-front small { font-size:10px; }.rb-live-table .premium-card-front span { font-size:19px; }
+  .rb-live-table .rb-live-card-vs { width:10%; }.rb-live-table .rb-live-card-vs b { font-size:13px; }.rb-live-table .rb-live-card-vs small { display:none; }
+  .rb-live-table .rb-house-pot { top:24%; width:37%; }.rb-live-table .rb-house-pot.black{left:10%}.rb-live-table .rb-house-pot.red{right:10%}
+  .rb-live-table .rb-house-pot small { font-size:4px; }.rb-live-table .rb-house-pot b { font-size:7px; }
+  .rb-live-table .rb-betting-board { height:48%; left:7%; right:7%; top:28%; }
+  .rb-live-table .rb-player-rail { bottom:24%; top:16%; width:39px; }.rb-live-table .rb-player-rail.left{left:0}.rb-live-table .rb-player-rail.right{right:0}
+  .rb-live-table .rb-player-seat,.rb-live-table .rb-player-rail.right .rb-player-seat { height:31%; }
+  .rb-live-table .rb-player-seat:nth-child(3) { display:none; }
+  .rb-live-table .rb-player-avatar,.rb-live-table .rb-player-rail.right .rb-player-avatar { border-width:1px; border-radius:7px; height:35px; width:30px; }
+  .rb-live-table .rb-player-copy,.rb-live-table .rb-player-rail.right .rb-player-copy { margin-top:-5px; min-width:38px; padding:2px; }.rb-live-table .rb-player-copy b { font-size:4px; }.rb-live-table .rb-player-copy span { font-size:4px; }
+  .rb-live-table .rb-seat-chip,.rb-live-table .rb-player-rank { display:none; }
+  .rb-live-table .rb-main-zones { height:45%; }.rb-live-table .rb-bet-zone.large > span:not(.rb-chip-cloud) { font-size:18px; }.rb-live-table .rb-bet-zone.large > em { font-size:6px; }
+  .rb-live-table .rb-lucky-row { bottom:17px; height:48%; }.rb-live-table .rb-lucky-title { height:13px; }.rb-live-table .rb-lucky-row > div { height:calc(100% - 13px); }
+  .rb-live-table .rb-lucky-row .rb-bet-zone > span:not(.rb-chip-cloud) { font-size:5px; }.rb-live-table .rb-lucky-row .rb-bet-zone > small { font-size:4px; }
+  .rb-live-table .rb-live-landed-pool > i { height:18px; width:18px; }
+  .rb-live-table .rb-table-timer { bottom:20%; height:43px; width:43px; }
+  .rb-live-table .rb-controls { bottom:0; gap:5px; grid-template-columns:1fr auto auto; grid-template-rows:1fr 48px; height:22%; padding:7px 8px 4px; }
+  .rb-live-table .rb-local-player { display:none; }
+  .rb-live-table .rb-chip-deck { grid-column:1 / -1; grid-row:1; }.rb-live-table .rb-chip-deck > small { display:none; }
+  .rb-live-table .rb-chip-deck .premium-chip-selector { gap:3px; justify-content:center; padding:1px; }
+  .rb-live-table .rb-chip-deck .premium-chip-selector button { flex-basis:34px; height:34px; max-width:34px; min-width:34px; width:34px; }.rb-live-table .rb-chip-deck .premium-chip-selector button span { font-size:7px; }
+  .rb-live-table .rb-bet-tools { grid-column:1; grid-row:2; }.rb-live-table .rb-bet-tools button { height:40px; }
+  .rb-live-table .rb-live-auto { grid-column:2; grid-row:2; height:43px !important; width:43px !important; }
+  .rb-live-table .rb-repeat-button { grid-column:3; grid-row:2; min-height:40px; min-width:83px; }
+  .rb-live-table .rb-footer-online { display:none; }
+  .rb-live-announcement { left:4%; right:4%; top:49%; }
+  .rb-live-duel-cinematic { inset:12% 0 22%; background-position:center top; }
+  .rb-live-king { bottom:9%; width:43%; }.rb-live-king.black{left:3%}.rb-live-king.red{right:3%}
+  .rb-live-king b { font-size:16px; }.rb-live-king span,.rb-live-king small { font-size:5px; }
+  .rb-live-versus strong { font-size:72px; }.rb-live-duel-cinematic h2 { bottom:2%; font-size:18px; }
+}
+
+/* Red vs Black exact-reference surface. The supplied 1560×720 image is the
+   canonical visual layer; live cards, bets, timer and controls sit over the
+   matching pixels without replacing its labels or characters. */
+.rb-exact-table {
+  background: #000;
+  height: min(100dvh,calc(100vw * 6 / 13));
+  left: 50%;
+  min-height: 0;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%,-50%);
+  width: min(100vw,calc(100dvh * 13 / 6));
+}
+.rb-exact-table::after { display: none; }
+.rb-exact-reference {
+  background: #000 url('/images/red-black/reference-table-hd.png') center/100% 100% no-repeat;
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+.rb-exact-user-profile {
+  align-items: center;
+  background: linear-gradient(100deg,#14131a 0 83%,rgba(20,19,26,.98) 83% 91%,transparent 92%);
+  border-block: 2px solid #554a35;
+  bottom: .15%;
+  display: flex;
+  height: 12.15%;
+  left: 11.35%;
+  overflow: hidden;
+  position: absolute;
+  width: 19.15%;
+  z-index: 88;
+}
+.rb-exact-user-profile::after {
+  border: 2px solid #695c3c;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 0 60% 0 0;
+  bottom: 0;
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 16%;
+}
+.rb-exact-user-avatar {
+  align-self: stretch;
+  background-image: url('/images/red-black/table-players.png');
+  background-position: 66.666% 0;
+  background-repeat: no-repeat;
+  background-size: 400% 200%;
+  border: 2px solid #d1af59;
+  box-shadow: inset 0 0 0 2px rgba(20,8,4,.55),2px 0 8px #000;
+  flex: 0 0 31.5%;
+  margin-left: 5.4%;
+}
+.rb-exact-user-copy { display: flex; flex-direction: column; min-width: 0; padding: 0 8% 0 8%; }
+.rb-exact-user-copy b {
+  color: #f5f2ea;
+  font-size: clamp(8px,1.45vw,23px);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 3px #000;
+  white-space: nowrap;
+}
+.rb-exact-user-copy small {
+  align-items: center;
+  color: #edc759;
+  display: flex;
+  font-size: clamp(8px,1.32vw,21px);
+  gap: clamp(4px,.55vw,9px);
+  margin-top: 8%;
+  text-shadow: 0 2px 3px #000;
+  white-space: nowrap;
+}
+.rb-exact-user-copy small i {
+  align-items: center;
+  background: radial-gradient(circle at 35% 30%,#fff89b,#f4ce2d 43%,#b36b05 72%);
+  border: 2px solid #ffd957;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px #9c5d03,0 1px 3px #000;
+  color: #c18208;
+  display: flex;
+  font-size: 0;
+  height: clamp(11px,1.65vw,26px);
+  justify-content: center;
+  position: relative;
+  transform: rotate(-12deg);
+  width: clamp(11px,1.65vw,26px);
+}
+.rb-exact-user-copy small i::after { color: #a46604; content: "¢"; font-family: Georgia,serif; font-size: 64%; font-style: normal; font-weight: 1000; }
+.rb-exact-controls { inset: 0; pointer-events: none; position: absolute; z-index: 96; }
+.rb-exact-hotspot {
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  height: 9.8%;
+  pointer-events: auto;
+  position: absolute;
+  top: .55%;
+  width: 4.5%;
+}
+.rb-exact-hotspot.back { left: 11.33%; }
+.rb-exact-hotspot.shop { left: 16.82%; }
+.rb-exact-hotspot.help { left: 82.55%; }
+.rb-exact-hotspot.sound { left: 88.18%; }
+.rb-exact-hotspot:hover,.rb-exact-hotspot:focus-visible,.rb-exact-repeat:hover,.rb-exact-repeat:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255,238,151,.9),0 0 20px #f6ad35;
+  outline: 0;
+}
+.rb-exact-hotspot:active,.rb-exact-repeat:active { filter: brightness(1.35); transform: scale(.94); }
+.rb-exact-hotspot.sound > i { display: none; }
+.rb-exact-hotspot.sound[data-muted="true"] > i {
+  background: #ed233c;
+  box-shadow: 0 0 5px #240008;
+  display: block;
+  height: 4px;
+  left: 16%;
+  pointer-events: none;
+  position: absolute;
+  top: 47%;
+  transform: rotate(-43deg);
+  width: 70%;
+}
+.rb-exact-duel-display {
+  height: 14.3%;
+  left: 33.2%;
+  pointer-events: none;
+  position: absolute;
+  top: 5.2%;
+  width: 37.3%;
+  z-index: 52;
+}
+.rb-exact-table .rb-live-card-row > .black-hand,.rb-exact-table .rb-live-card-row > .red-hand { gap: .55vw; }
+.rb-exact-table .rb-live-card-vs { width: 19%; }
+.rb-exact-table .premium-playing-card {
+  height: 13.7vh;
+  max-height: none;
+  max-width: none;
+  opacity: 0;
+  width: 4.45vw;
+}
+.rb-exact-table .premium-playing-card.revealed { opacity: 1; }
+.rb-exact-table .premium-card-front { border-color: #dfc97e; border-radius: 3px; padding: 5px; }
+.rb-exact-table .premium-card-front b,.rb-exact-table .premium-card-front small { font-size: clamp(10px,1.7vh,17px); }
+.rb-exact-table .premium-card-front span { font-size: clamp(22px,4.5vh,39px); }
+
+.rb-exact-bet-layer { inset: 0; pointer-events: none; position: absolute; z-index: 74; }
+.rb-exact-bet-button {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  position: absolute;
+}
+.rb-exact-bet-button:disabled { cursor: default; }
+.rb-exact-bet-button[data-option="BLACK"] { height: 21%; left: 25.15%; top: 29.4%; width: 26.8%; }
+.rb-exact-bet-button[data-option="RED"] { height: 21%; left: 52%; top: 29.4%; width: 28.5%; }
+.rb-exact-bet-button[data-option="PAIR"] { height: 19.5%; left: 25.15%; top: 50.7%; width: 13.5%; }
+.rb-exact-bet-button[data-option="HIGH_CARD"] { height: 19.5%; left: 38.65%; top: 50.7%; width: 13.5%; }
+.rb-exact-bet-button[data-option="STRAIGHT"] { height: 19.5%; left: 52.15%; top: 50.7%; width: 13.5%; }
+.rb-exact-bet-button[data-option="FLUSH"] { height: 19.5%; left: 65.65%; top: 50.7%; width: 14.85%; }
+.rb-exact-bet-button:hover:not(:disabled),.rb-exact-bet-button:focus-visible {
+  background: rgba(255,241,163,.055);
+  box-shadow: inset 0 0 0 2px rgba(255,238,151,.72),inset 0 0 25px rgba(255,202,72,.12);
+  outline: 0;
+}
+.rb-exact-bet-button[data-selected="true"] { box-shadow: inset 0 0 0 2px rgba(255,223,117,.72),inset 0 0 28px rgba(255,199,60,.11); }
+.rb-exact-bet-button[data-winning="true"] { animation: premiumWinner .7s ease-in-out infinite; }
+.rb-exact-user-chip {
+  align-items: center;
+  background: repeating-conic-gradient(#fff1a7 0 8deg,#9b2448 8deg 16deg);
+  border: 2px solid #ffe7a1;
+  border-radius: 50%;
+  bottom: 10%;
+  box-shadow: inset 0 0 0 4px #7b1734,0 3px 7px #000,0 0 11px #ffd45f;
+  color: #fff8dd;
+  display: flex;
+  font-size: clamp(5px,.55vw,9px);
+  height: clamp(28px,3vw,46px);
+  justify-content: center;
+  position: absolute;
+  right: 8%;
+  text-shadow: 0 1px 2px #000;
+  width: clamp(28px,3vw,46px);
+}
+
+.rb-exact-timer {
+  align-items: center;
+  background: radial-gradient(circle at 36% 30%,#fff9c7,#f2c752 52%,#b66716 78%);
+  border-radius: 50%;
+  color: #51441f;
+  display: flex;
+  height: 7.3%;
+  justify-content: center;
+  left: 50.62%;
+  position: absolute;
+  top: 74.1%;
+  transform: translate(-50%,-50%);
+  width: 3.37%;
+  z-index: 78;
+}
+.rb-exact-timer b { font-family: Georgia,"Times New Roman",serif; font-size: clamp(14px,2.5vw,34px); line-height: 1; text-shadow: 0 1px rgba(255,255,255,.7); }
+
+.rb-exact-chip-controls {
+  bottom: .4%;
+  display: grid;
+  gap: .8%;
+  grid-template-columns: repeat(6,1fr);
+  height: 11.5%;
+  left: 31.25%;
+  position: absolute;
+  width: 38.4%;
+  z-index: 95;
+}
+.rb-exact-chip-controls button {
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  min-width: 0;
+}
+.rb-exact-chip-controls button:disabled { cursor: default; }
+.rb-exact-chip-controls button:hover:not(:disabled),.rb-exact-chip-controls button:focus-visible,.rb-exact-chip-controls button[data-selected="true"] {
+  box-shadow: 0 0 0 3px rgba(255,245,177,.82),0 0 19px #ffc94c;
+  outline: 0;
+}
+.rb-exact-chip-controls button:active:not(:disabled) { transform: translateY(3px) scale(.93); }
+.rb-exact-repeat {
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  bottom: 1.95%;
+  cursor: pointer;
+  height: 8.55%;
+  left: 76.8%;
+  position: absolute;
+  width: 8.25%;
+  z-index: 96;
+}
+.rb-exact-repeat:disabled { cursor: default; opacity: .62; }
+
+.rb-exact-table .rb-live-announcement {
+  background: linear-gradient(90deg,transparent,rgba(4,88,81,.88) 22%,rgba(4,102,94,.94) 50%,rgba(4,88,81,.88) 78%,transparent);
+  left: 22%;
+  right: 19%;
+  top: 49%;
+  z-index: 90 !important;
+}
+.rb-exact-table .rb-live-announcement strong {
+  color: #fff4d3;
+  font-family: Arial,Helvetica,sans-serif;
+  font-size: clamp(28px,5vw,72px);
+  font-style: italic;
+  font-weight: 800;
+  padding: 12px 0;
+  text-shadow: 0 3px 4px #063d38,0 0 12px #fff0a6;
+}
+.rb-exact-table .rb-live-announcement span { font-size: clamp(24px,4vw,58px); margin: -12px 0 8px; }
+.rb-exact-table .rb-live-announcement[data-phase="COUNTDOWN"] strong { font-size: clamp(17px,2.8vw,42px); padding-bottom: 7px; }
+
+.rb-exact-result {
+  align-items: center;
+  background: linear-gradient(90deg,transparent,rgba(12,10,16,.9) 22%,rgba(29,18,25,.96) 50%,rgba(12,10,16,.9) 78%,transparent);
+  border-block: 2px solid #eac764;
+  display: flex;
+  flex-direction: column;
+  left: 18%;
+  padding: 12px 0;
+  pointer-events: none;
+  position: absolute;
+  right: 13%;
+  top: 40%;
+  z-index: 91;
+}
+.rb-exact-result strong { color: #fff1a2; font-family: Georgia,"Times New Roman",serif; font-size: clamp(30px,5.5vw,80px); text-shadow: 0 3px 0 #4e1a08,0 0 20px #ffb531; }
+.rb-exact-result[data-winner="RED"] strong { color: #fff; text-shadow: 0 3px 0 #790e21,0 0 22px #ff334f; }
+.rb-exact-result span { color: #fff; font-size: clamp(8px,1.2vw,18px); font-weight: 700; margin-top: 4px; text-transform: capitalize; }
+.rb-exact-result span b { color: #f5ce61; margin: 0 12px; }
+.rb-exact-table .rb-live-payout { z-index: 92 !important; }
+
+@media (orientation: portrait) {
+  .rb-exact-table { height: calc(100vw * 6 / 13); top: 50%; width: 100vw; }
+  .rb-exact-table .premium-playing-card { height: 6.25vw; width: 4.45vw; }
+  .rb-exact-table .premium-card-front { padding: 2px; }
+  .rb-exact-table .premium-card-front b,.rb-exact-table .premium-card-front small { font-size: 5px; }
+  .rb-exact-table .premium-card-front span { font-size: 11px; }
+  .rb-exact-user-chip { border-width: 1px; height: 18px; width: 18px; }
+  .rb-exact-timer b { font-size: 8px; }
+  .rb-exact-user-profile { border-width: 1px; }
+  .rb-exact-user-avatar { border-width: 1px; }
+  .rb-exact-user-copy { padding-left: 5%; }
+  .rb-exact-user-copy b,.rb-exact-user-copy small { font-size: 5px; }
+  .rb-exact-user-copy small { gap: 2px; margin-top: 4%; }
+  .rb-exact-user-copy small i { border-width: 1px; height: 7px; width: 7px; }
+}
+
+/* Targeted fixes only; preserve the original table and chip artwork. */
+.rb-social-cover {
+  position: absolute;
+  inset: 15% 0 67% 92.3%;
+  z-index: 3;
+  background: radial-gradient(ellipse at left,#291b32,#160f20);
+  pointer-events: none;
+}
+/* Replace the printed digit inside the existing clock face. */
+.rb-exact-timer {
+  left: 50.9%;
+  top: 77.7%;
+  width: 3.65%;
+  height: 7.9%;
+}
+.rb-exact-chip-controls {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+.rb-exact-chip-controls button {
+  position: absolute;
+  top: 87.9%;
+  width: 5.9%;
+  height: 12.78%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+.rb-exact-chip-controls button:active:not(:disabled) { transform: translateX(-50%); }
+.rb-exact-chip-controls button:hover:not(:disabled),
+.rb-exact-chip-controls button:focus-visible,
+.rb-exact-chip-controls button[data-selected="true"] {
+  box-shadow: inset 0 0 0 3px #fff0a7, inset 0 0 12px #ffd35c;
+}
+
+/* Remastered artwork coordinates; keep controls aligned to the painted assets. */
+.rb-exact-table { container-type: size; }
+.rb-social-cover { display: none; }
+.rb-exact-hotspot.back { left: 9.1%; width: 4.5%; }
+.rb-exact-hotspot.shop { left: 14.5%; width: 4.5%; }
+.rb-exact-hotspot.help { left: 84.4%; width: 4.5%; }
+.rb-exact-hotspot.sound { left: 89.9%; width: 4.5%; }
+.rb-exact-user-profile { left: 9.7%; width: 20.4%; }
+.rb-exact-repeat { left: 78%; width: 8.2%; }
+.rb-exact-timer { left: 50.1%; top: 78.5%; width: 3.5%; height: 7.55%; }
+.rb-exact-chip-controls button { top: 88.3%; width: 5.85%; height: 12.65%; }
+.rb-exact-duel-display { left: 30.6%; top: 5.1%; width: 38.2%; height: 14.4%; }
+.rb-exact-table .rb-live-card-row > .black-hand,
+.rb-exact-table .rb-live-card-row > .red-hand { width: 43%; gap: .4cqw; }
+.rb-exact-table .rb-live-card-vs { width: 14%; }
+.rb-exact-table .premium-playing-card { width: 4.55cqw; height: 6.55cqw; }

@@ -1,4 +1,4 @@
-export type GameSound = "chip" | "count" | "launch" | "wheel" | "card" | "dice" | "reel" | "lightning" | "cashout" | "win" | "loss";
+export type GameSound = "chip" | "count" | "betOpen" | "betClose" | "deal" | "flip" | "impact" | "payout" | "launch" | "wheel" | "card" | "dice" | "reel" | "lightning" | "cashout" | "win" | "loss";
 
 interface SoundSettings {
   master: number;
@@ -32,6 +32,12 @@ class SharedSoundManager {
     const patterns: Record<GameSound, Array<[number, number, OscillatorType, number]>> = {
       chip: [[620, 0.055, "sine", 0], [920, 0.04, "sine", 0.035]],
       count: [[440, 0.08, "square", 0]],
+      betOpen: [[330, 0.1, "sine", 0], [495, 0.11, "sine", 0.08], [660, 0.16, "sine", 0.16]],
+      betClose: [[150, 0.12, "square", 0], [92, 0.24, "sawtooth", 0.09]],
+      deal: [[310, 0.045, "triangle", 0], [470, 0.05, "triangle", 0.075], [650, 0.06, "triangle", 0.15]],
+      flip: [[720, 0.045, "triangle", 0], [430, 0.07, "sine", 0.045]],
+      impact: [[72, 0.28, "sawtooth", 0], [860, 0.13, "square", 0.035], [1120, 0.12, "sine", 0.11]],
+      payout: [[520, 0.06, "sine", 0], [720, 0.07, "sine", 0.065], [940, 0.09, "sine", 0.14]],
       launch: [[90, 0.22, "sawtooth", 0], [180, 0.32, "sine", 0.08]],
       wheel: [[150, 0.18, "triangle", 0], [210, 0.12, "triangle", 0.09]],
       card: [[760, 0.045, "triangle", 0], [510, 0.055, "sine", 0.045]],
@@ -59,4 +65,3 @@ class SharedSoundManager {
 }
 
 export const SoundManager = new SharedSoundManager();
-
