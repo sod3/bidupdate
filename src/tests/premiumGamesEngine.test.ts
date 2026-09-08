@@ -39,19 +39,24 @@ describe("premium shared game engine", () => {
     }
   });
 
-  it("uses an invertible Flight X display curve and bounded committed endpoint", () => {
-    for (const multiplier of [1, 1.05, 1.5, 2, 5, 25, 100]) {
+  it("uses an invertible Flight X display curve and weighted committed endpoint", () => {
+    for (const multiplier of [1, 1.05, 1.5, 2, 5, 25, 100, 250]) {
       expect(flightMultiplierAt(flightElapsedFor(multiplier))).toBeCloseTo(multiplier, 2);
     }
     for (let index = 0; index < 500; index += 1) {
       const crash = createFlightCrash(`flight:seed:${index}`);
       expect(crash).toBeGreaterThanOrEqual(1);
-      expect(crash).toBeLessThanOrEqual(100);
+      expect(Number.isFinite(crash)).toBe(true);
     }
     const survivals = Array.from({ length: 2_000 }, (_, index) => createFlightCrash(`flight:survival:${index}`));
     const launchSurvivalRate = survivals.filter((crash) => crash > 1).length / survivals.length;
-    expect(launchSurvivalRate).toBeGreaterThan(0.07);
-    expect(launchSurvivalRate).toBeLessThan(0.13);
+    const survivalToTwo = survivals.filter((crash) => crash >= 2).length / survivals.length;
+    expect(launchSurvivalRate).toBeGreaterThan(0.87);
+    expect(launchSurvivalRate).toBeLessThan(0.93);
+    expect(survivalToTwo).toBeGreaterThan(0.42);
+    expect(survivalToTwo).toBeLessThan(0.48);
+    expect(survivals.filter((crash) => crash >= 5).length).toBeLessThan(survivals.filter((crash) => crash >= 2).length);
+    expect(survivals.filter((crash) => crash >= 10).length).toBeLessThan(survivals.filter((crash) => crash >= 5).length);
   });
 
   it("maps roulette numbers and car winners to distinct animation landings", () => {

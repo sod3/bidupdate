@@ -25,6 +25,18 @@ export interface ActiveFlightRound {
   commitment: string;
   startedAt: string;
   serverNow: string;
+  bets: FlightBetResult[];
+  acceptedCashout?: FlightBetResult;
+}
+
+export type FlightBetState = "idle" | "placed" | "active" | "cashed_out" | "lost";
+
+export interface FlightBetResult {
+  id: "FLIGHT_1" | "FLIGHT_2";
+  amount: number;
+  state: FlightBetState;
+  cashOutMultiplier: number | null;
+  payout: number;
 }
 
 export interface CompletedPremiumRound {
@@ -112,13 +124,13 @@ export const ServerResultService = {
     }
     throw new Error("The game server could not complete that request.");
   },
-  cashout(gameId: "flight-x", roundId: string) {
+  cashout(gameId: "flight-x", roundId: string, betId: "FLIGHT_1" | "FLIGHT_2") {
     return fetch(`/api/premium-games/${gameId}`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "cashout", roundId }),
-    }).then(json<{ round: CompletedPremiumRound }>);
+      body: JSON.stringify({ action: "cashout", roundId, betId }),
+    }).then(json<{ round: CompletedPremiumRound | ActiveFlightRound }>);
   },
 };
 

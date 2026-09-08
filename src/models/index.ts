@@ -694,8 +694,9 @@ const gameRoundSchema = new Schema(
     balanceAfter: { type: Number, min: 0, required: true },
     startedAt: { type: Date, required: true, default: Date.now },
     completedAt: { type: Date, default: null, index: true },
-    crashMultiplier: { type: Number, min: 1, max: 100, default: null, select: false },
-    cashedOutMultiplier: { type: Number, min: 1, max: 100, default: null },
+    crashMultiplier: { type: Number, min: 1, default: null, select: false },
+    cashedOutMultiplier: { type: Number, min: 1, default: null },
+    flightBets: { type: Schema.Types.Mixed, default: [] },
   },
   { timestamps: true, versionKey: false },
 );

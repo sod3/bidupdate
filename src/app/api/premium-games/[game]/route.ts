@@ -23,6 +23,7 @@ const playSchema = z.object({
 const cashoutSchema = z.object({
   action: z.literal("cashout"),
   roundId: z.string().trim().min(20).max(160).regex(/^[a-zA-Z0-9:_-]+$/),
+  betId: z.enum(["FLIGHT_1", "FLIGHT_2"]),
 });
 const actionSchema = z.discriminatedUnion("action", [playSchema, cashoutSchema]);
 
@@ -56,6 +57,7 @@ export async function GET(_request: Request, context: { params: Promise<{ game: 
 }
 
 export async function POST(request: Request, context: { params: Promise<{ game: string }> }) {
+  const requestReceivedAt = Date.now();
   try {
     assertSameOrigin(request);
     const user = await requireUser();
@@ -68,7 +70,7 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
 
     if (input.action === "cashout") {
       if (gameId !== "flight-x") throw new ApiError("Cash out is only available in Crash.", 400, "ACTION_NOT_SUPPORTED");
-      return noStoreJson({ round: await settleFlightRound(user.userId, input.roundId, true) });
+      return noStoreJson({ round: await settleFlightRound(user.userId, input.roundId, true, input.betId, requestReceivedAt) });
     }
 
     const definition = premiumGame(gameId);
@@ -77,7 +79,8 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
     const totalStake = input.selections.reduce((sum, selection) => sum + selection.amount, 0);
     const gcd = (left: number, right: number): number => right ? gcd(right, left % right) : left;
     const chipStep = setting.chipDenominations.reduce(gcd);
-    if (duplicateSelection || input.selections.some((selection) => !allowed.has(selection.id) || selection.amount % chipStep !== 0)) {
+    const flightSelection = (id: string) => gameId === "flight-x" && ["FLIGHT_1", "FLIGHT_2"].includes(id);
+    if (duplicateSelection || input.selections.some((selection) => (!allowed.has(selection.id) && !flightSelection(selection.id)) || selection.amount % chipStep !== 0)) {
       throw new ApiError("One or more bet selections are not available.", 400, "INVALID_SELECTION");
     }
     if (totalStake < setting.minStake || totalStake > setting.maxStake) {

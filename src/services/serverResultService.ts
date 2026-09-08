@@ -45,6 +45,29 @@ function id(value: unknown) {
   return value ? String(value) : "";
 }
 
+type FlightBetId = "FLIGHT_1" | "FLIGHT_2";
+interface ServerFlightBet {
+  id: FlightBetId;
+  amount: number;
+  state: "active" | "cashed_out" | "lost";
+  cashOutMultiplier: number | null;
+  payout: number;
+  cashOutRequestedAt?: Date | null;
+}
+
+function flightBets(row: Record<string, unknown>): ServerFlightBet[] {
+  if (Array.isArray(row.flightBets)) return row.flightBets as ServerFlightBet[];
+  const selections = Array.isArray(row.selections) ? row.selections as RoundSelection[] : [];
+  return selections.map((selection, index) => ({
+    id: (selection.id === "FLIGHT_2" || index === 1 ? "FLIGHT_2" : "FLIGHT_1") as FlightBetId,
+    amount: Number(selection.amount), state: "active", cashOutMultiplier: null, payout: 0,
+  }));
+}
+
+function publicFlightBets(row: Record<string, unknown>) {
+  return flightBets(row).map(({ id: betId, amount, state, cashOutMultiplier, payout }) => ({ id: betId, amount, state, cashOutMultiplier, payout }));
+}
+
 export async function getGameSetting(gameId: PremiumGameId): Promise<EffectiveSetting> {
   const definition = premiumGame(gameId);
   const stored = await GameSetting.findOne({ gameId }).lean();
@@ -122,6 +145,7 @@ function serializeActiveFlight(row: Record<string, unknown>) {
     commitment: row.rngCommitment,
     startedAt: row.startedAt,
     serverNow: new Date(),
+    bets: publicFlightBets(row),
   };
 }
 
@@ -307,7 +331,17 @@ export async function startFlightRound(input: { userId: string; requestId: strin
   if (!gameSession) throw new ApiError("The flight session could not be opened.", 500, "SESSION_CREATE_FAILED");
   const totalStake = sumStake(input.selections);
   const rng = createRoundSeed(gameId);
-  const crashMultiplier = createFlightCrash(rng.seed);
+  const previousRound = await GameRound.findOne({ userId: input.userId, gameId, status: "COMPLETED" }).select("+crashMultiplier").sort({ completedAt: -1 }).lean();
+  const previousCrash = Number(previousRound?.crashMultiplier ?? 0);
+  let crashMultiplier = createFlightCrash(rng.seed);
+  for (let attempt = 1; crashMultiplier === previousCrash && attempt <= 8; attempt += 1) crashMultiplier = createFlightCrash(`${rng.seed}:retry:${attempt}`);
+  const initialFlightBets: ServerFlightBet[] = input.selections.map((selection) => ({
+    id: selection.id as FlightBetId,
+    amount: selection.amount,
+    state: "active",
+    cashOutMultiplier: null,
+    payout: 0,
+  }));
   const betId = `${gameId}_bet_${randomUUID()}`;
   const startedAt = new Date();
 
@@ -324,7 +358,7 @@ export async function startFlightRound(input: { userId: string; requestId: strin
       idempotencyKey: `premium:${input.userId}:${gameId}:${input.requestId}`,
       userId: input.userId, gameId, sessionId: gameSession.sessionId,
       status: "PLAYING", phase: "ANIMATING", totalStake, payout: 0, net: -totalStake, result: "PENDING", selections: input.selections,
-      rngVersion: PREMIUM_RNG_VERSION, rngCommitment: rng.commitment, rngSeed: rng.seed, crashMultiplier,
+      rngVersion: PREMIUM_RNG_VERSION, rngCommitment: rng.commitment, rngSeed: rng.seed, crashMultiplier, flightBets: initialFlightBets,
       balanceAfter: Number(debit.wallet.balance), startedAt,
     }], { session });
     await GameBet.create([{ betId, roundId: rng.roundId, userId: input.userId, gameId, amount: totalStake, status: "ACCEPTED", idempotencyKey: `premium:${input.userId}:${gameId}:${input.requestId}:bet` }], { session });
@@ -338,12 +372,12 @@ export async function startFlightRound(input: { userId: string; requestId: strin
   return { round: serializeActiveFlight(created as unknown as Record<string, unknown>), duplicate: id(created.roundId) !== rng.roundId };
 }
 
-export async function settleFlightRound(userId: string, roundId: string, cashout: boolean) {
+export async function settleFlightRound(userId: string, roundId: string, cashout: boolean, betId?: FlightBetId, requestedAt = Date.now()) {
   const gameId = "flight-x" as const;
   // A cash-out is judged at server request arrival, not after wallet/database
   // work completes. This prevents transaction latency from turning an on-time
   // click into a crash while keeping the timestamp fully server-controlled.
-  const cashoutRequestedAt = Date.now();
+  const cashoutRequestedAt = requestedAt;
   const round = await GameRound.findOne({ userId, gameId, roundId }).select("+rngSeed +crashMultiplier").lean();
   if (!round) throw new ApiError("Flight round not found.", 404, "ROUND_NOT_FOUND");
   if (round.status !== "PLAYING") return serializeCompletedRound(round as unknown as Record<string, unknown>);
@@ -353,8 +387,45 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
   const crashMultiplier = Number(round.crashMultiplier);
   const crashed = elapsed >= flightElapsedFor(crashMultiplier) || current >= crashMultiplier;
   if (!cashout && !crashed) return serializeActiveFlight(round as unknown as Record<string, unknown>);
+  if (cashout && !betId) throw new ApiError("Choose the bet to cash out.", 400, "BET_REQUIRED");
 
   const database = await connectDB();
+
+  if (cashout && !crashed) {
+    await database.connection.transaction(async (session) => {
+      const live = await GameRound.findOne({ userId, gameId, roundId, status: "PLAYING" }).select("+rngSeed +crashMultiplier").session(session).lean();
+      if (!live) return;
+      const liveElapsed = cashoutRequestedAt - new Date(live.startedAt).getTime();
+      const liveCurrent = flightMultiplierAt(liveElapsed);
+      const liveCrash = Number(live.crashMultiplier);
+      if (liveElapsed >= flightElapsedFor(liveCrash) || liveCurrent >= liveCrash) return;
+      const bets = flightBets(live as unknown as Record<string, unknown>);
+      const target = bets.find((item) => item.id === betId);
+      if (!target) throw new ApiError("That flight bet was not found.", 404, "BET_NOT_FOUND");
+      if (target.state !== "active") return;
+      const lockedMultiplier = Math.min(liveCrash, liveCurrent);
+      const payout = roundCredits(target.amount * lockedMultiplier);
+      const reward = await applyWalletChange({
+        userId, amount: payout, type: "RACE_REWARD", description: `Crash cash-out at ${lockedMultiplier.toFixed(2)}x`, referenceId: roundId,
+        idempotencyKey: `premium:${userId}:${gameId}:${roundId}:payout:${betId}`,
+        metadata: { game: gameId, roundId, betId, multiplier: lockedMultiplier, requestedAt: new Date(cashoutRequestedAt), serverVerified: true },
+      }, session);
+      target.state = "cashed_out";
+      target.cashOutMultiplier = lockedMultiplier;
+      target.payout = payout;
+      target.cashOutRequestedAt = new Date(cashoutRequestedAt);
+      const totalPayout = roundCredits(bets.reduce((sum, item) => sum + item.payout, 0));
+      await GameRound.updateOne({ roundId, status: "PLAYING" }, { $set: {
+        flightBets: bets, payout: totalPayout, net: totalPayout - Number(live.totalStake), balanceAfter: Number(reward.wallet.balance),
+      } }, { session });
+    });
+
+    const updated = await GameRound.findOne({ userId, gameId, roundId }).select("+rngSeed +crashMultiplier").lean();
+    if (!updated) throw new ApiError("Flight round not found.", 404, "ROUND_NOT_FOUND");
+    if (updated.status !== "PLAYING") return serializeCompletedRound(updated as unknown as Record<string, unknown>);
+    const active = serializeActiveFlight(updated as unknown as Record<string, unknown>);
+    return { ...active, acceptedCashout: active.bets.find((item) => item.id === betId) };
+  }
 
   await database.connection.transaction(async (session) => {
     const live = await GameRound.findOne({ userId, gameId, roundId, status: "PLAYING" }).select("+rngSeed +crashMultiplier").session(session).lean();
@@ -363,31 +434,25 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
     const liveCurrent = flightMultiplierAt(liveElapsed);
     const liveCrash = Number(live.crashMultiplier);
     const liveCrashed = liveElapsed >= flightElapsedFor(liveCrash) || liveCurrent >= liveCrash;
-    const liveCashout = cashout && !liveCrashed ? liveCurrent : null;
-    const livePayout = liveCashout ? roundCredits(Number(live.totalStake) * liveCashout) : 0;
+    if (!liveCrashed) return;
+    const bets = flightBets(live as unknown as Record<string, unknown>).map((item) => item.state === "active" ? { ...item, state: "lost" as const } : item);
+    const livePayout = roundCredits(bets.reduce((sum, item) => sum + item.payout, 0));
+    const highestCashout = bets.reduce<number | null>((highest, item) => item.cashOutMultiplier == null ? highest : Math.max(highest ?? 1, item.cashOutMultiplier), null);
     const liveOutcome: PremiumRoundOutcome = {
       result: livePayout > 0 ? "WIN" : "LOSS",
-      label: livePayout > 0 ? `CASHED OUT AT ${liveCashout?.toFixed(2)}×` : `ROUND ENDED AT ${liveCrash.toFixed(2)}×`,
+      label: `FLEW AWAY AT ${liveCrash.toFixed(2)}×`,
       payout: livePayout,
-      multiplier: livePayout > 0 ? Number(liveCashout) : 0,
-      winningOptions: livePayout > 0 ? ["FLIGHT"] : [],
-      payload: { crashMultiplier: liveCrash, cashedOutMultiplier: liveCashout },
+      multiplier: liveCrash,
+      winningOptions: bets.filter((item) => item.state === "cashed_out").map((item) => item.id),
+      payload: { crashMultiplier: liveCrash, cashedOutMultiplier: highestCashout, bets: publicFlightBets({ flightBets: bets }) },
     };
     const liveHash = resultHash(String(live.rngSeed), liveOutcome);
-    let balanceAfter = Number(live.balanceAfter);
-    if (livePayout > 0) {
-      const reward = await applyWalletChange({
-        userId, amount: livePayout, type: "RACE_REWARD", description: `Crash ${liveOutcome.label}`, referenceId: roundId,
-        idempotencyKey: `premium:${userId}:${gameId}:${roundId}:payout`,
-        metadata: { game: gameId, roundId, multiplier: liveCashout, serverVerified: true },
-      }, session);
-      balanceAfter = Number(reward.wallet.balance);
-    }
+    const balanceAfter = Number(live.balanceAfter);
     const bet = await GameBet.findOne({ roundId }).session(session).lean();
     if (!bet) throw new ApiError("Flight bet record is missing.", 500, "BET_NOT_FOUND");
     await GameRound.updateOne({ roundId, status: "PLAYING" }, { $set: {
       status: "COMPLETED", phase: "RESULT", payout: livePayout, net: livePayout - Number(live.totalStake), result: liveOutcome.result,
-      resultLabel: liveOutcome.label, outcome: liveOutcome, serverResultHash: liveHash, balanceAfter, cashedOutMultiplier: liveCashout, completedAt: new Date(),
+      resultLabel: liveOutcome.label, outcome: liveOutcome, serverResultHash: liveHash, balanceAfter, cashedOutMultiplier: highestCashout, flightBets: bets, completedAt: new Date(),
     } }, { session });
     await RngRound.updateOne({ roundId }, { $set: { resultHash: liveHash, revealedAt: new Date() } }, { session });
     await GameSession.updateOne({ sessionId: live.sessionId }, { $set: { activeRoundId: null, lastSeenAt: new Date() } }, { session });

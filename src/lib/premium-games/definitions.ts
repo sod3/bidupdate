@@ -216,7 +216,7 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
       "Press Cash Out before the aircraft reaches its hidden end point. Your return is stake × current multiplier.",
       "The end point is locked and committed before launch. Refreshing reconnects to the same round.",
     ],
-    probabilityNote: "Very Hard mode gives roughly 10% of endpoints a path beyond 1.00×, with survival falling further at higher multipliers and a 100× cap. The seed is revealed after settlement for audit.",
+    probabilityNote: "Crash endpoints use a weighted inverse curve: low multipliers are common and survival falls progressively at higher multipliers. The committed seed is revealed after settlement for audit.",
   },
   "dragon-tiger": {
     id: "dragon-tiger",

@@ -13,7 +13,7 @@ import {
 } from "@/components/premium-games/GameChrome";
 import { GameStage } from "@/components/premium-games/GameStage";
 import { RedBlackTable } from "@/components/premium-games/RedBlackTable";
-import { GameSessionManager, PremiumGameRequestError, ServerResultService, TransactionManager, type ActiveFlightRound, type CompletedPremiumRound, type PremiumGameState } from "@/lib/premium-games/client";
+import { GameSessionManager, PremiumGameRequestError, ServerResultService, TransactionManager, type ActiveFlightRound, type CompletedPremiumRound, type FlightBetResult, type PremiumGameState } from "@/lib/premium-games/client";
 import { premiumGame, type PremiumBetOption, type PremiumGameId } from "@/lib/premium-games/definitions";
 import { SoundManager, type GameSound } from "@/lib/premium-games/soundManager";
 import { triggerGameCinematic } from "@/lib/gameCinematics";
@@ -63,7 +63,8 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const [round, setRound] = useState<CompletedPremiumRound | null>(null);
   const [activeFlight, setActiveFlight] = useState<ActiveFlightRound | null>(null);
   const [flightMultiplier, setFlightMultiplier] = useState(1);
-  const [cashoutPending, setCashoutPending] = useState(false);
+  const [cashoutPendingBays, setCashoutPendingBays] = useState<[boolean, boolean]>([false, false]);
+  const [flightBetResults, setFlightBetResults] = useState<FlightBetResult[]>([]);
   const [flightBays, setFlightBays] = useState<[FlightBetBay, FlightBetBay]>(() => [
     { amount: game.chips[0], autoCashout: 1.58, autoEnabled: false },
     { amount: game.chips[0], autoCashout: 1.58, autoEnabled: false },
@@ -79,6 +80,8 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const [master, setMaster] = useState(0.7);
   const [sfx, setSfx] = useState(0.75);
   const busyRef = useRef(false);
+  const flightLaunchBetsRef = useRef<Map<string, number>>(new Map());
+  const cashoutPendingRef = useRef<[boolean, boolean]>([false, false]);
   const betsRef = useRef<Map<string, number>>(new Map());
   const balanceRef = useRef(0);
   const premiumStateRef = useRef<PremiumGameState | null>(null);
@@ -105,9 +108,9 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     if (singleAction) setBets((current) => current.size ? current : new Map([[defaultOption, firstChip]]));
     if (payload.activeRound) {
       setActiveFlight(payload.activeRound);
-      setActiveFlightBay((current) => current ?? 0);
-      setBets(new Map([[defaultOption, payload.activeRound.totalStake]]));
-      setFlightBays((current) => [{ ...current[0], amount: payload.activeRound?.totalStake ?? current[0].amount }, current[1]]);
+      setFlightBetResults(payload.activeRound.bets);
+      setBets(new Map(payload.activeRound.bets.map((bet) => [bet.id, bet.amount])));
+      setFlightBays((current) => current.map((bay, index) => ({ ...bay, amount: payload.activeRound?.bets[index]?.amount ?? bay.amount })) as [FlightBetBay, FlightBetBay]);
       setBalance(payload.activeRound.balance);
       setPhase("ANIMATING");
     }
@@ -145,9 +148,12 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   }, [loadState]);
 
   const finishFlight = useCallback((completed: CompletedPremiumRound, nextState?: PremiumGameState) => {
-    setCashoutPending(false);
+    const completedBets = Array.isArray(completed.payload.bets) ? completed.payload.bets as FlightBetResult[] : [];
+    setFlightBetResults(completedBets);
+    cashoutPendingRef.current = [false, false];
+    setCashoutPendingBays([false, false]);
     setActiveFlight(null);
-    setFlightMultiplier(Number(completed.payload.cashedOutMultiplier ?? completed.payload.crashMultiplier ?? 1));
+    setFlightMultiplier(Number(completed.payload.crashMultiplier ?? completed.payload.cashedOutMultiplier ?? 1));
     setRound(completed);
     setBalance(completed.balance);
     setPhase("RESULT");
@@ -163,13 +169,21 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     let stopped = false;
     let frame = 0;
     let polling = false;
+    let lastUiCommit = 0;
     const start = new Date(activeFlight.startedAt).getTime();
-    const animate = () => {
+    const animate = (now: number) => {
       const elapsed = Math.max(0, sessionClock.current.now() - start);
-      setFlightMultiplier((current) => Math.max(current, Math.min(100, Math.round(Math.exp(elapsed / 5500) * 100) / 100)));
+      // Canvas/SVG motion interpolates on every animation frame. React only
+      // receives a compact 20 Hz snapshot for payout text and auto-cashout,
+      // avoiding a full component-tree render on every display frame.
+      const nextMultiplier = Math.round(Math.exp(elapsed / 5500) * 100) / 100;
+      if (now - lastUiCommit >= 50) {
+        lastUiCommit = now;
+        setFlightMultiplier((current) => Math.max(current, nextMultiplier));
+      }
       if (!stopped) frame = window.requestAnimationFrame(animate);
     };
-    animate();
+    frame = window.requestAnimationFrame(animate);
     const poll = window.setInterval(() => {
       if (polling || stopped) return;
       polling = true;
@@ -372,7 +386,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     setError(null);
     setBets(roundBets);
     setLastBets(roundBets);
-    if (gameId === "flight-x") setCashoutPending(false);
+    if (gameId === "flight-x") setCashoutPendingBays([false, false]);
     if (launchBay !== undefined) setActiveFlightBay(launchBay);
     setRound(null);
     setPhase("CLOSED");
@@ -391,11 +405,13 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
         await delay(600);
       }
       setCountdown(0);
-      const response = await ServerResultService.play(gameId, TransactionManager.requestId(gameId), TransactionManager.normalizeSelections(roundBets));
+      const submittedBets = gameId === "flight-x" ? new Map(flightLaunchBetsRef.current) : roundBets;
+      const response = await ServerResultService.play(gameId, TransactionManager.requestId(gameId), TransactionManager.normalizeSelections(submittedBets));
       if (response.round.status === "PLAYING") {
         const flight = response.round as ActiveFlightRound;
         sessionClock.current.sync(flight.serverNow);
         setActiveFlight(flight);
+        setFlightBetResults(flight.bets);
         setBalance(flight.balance);
         setFlightMultiplier(1);
         setPhase("ANIMATING");
@@ -426,34 +442,45 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     }
   };
 
-  const cashOut = useCallback(async () => {
-    if (!activeFlight || busyRef.current) return;
+  const cashOut = useCallback(async (index: number) => {
+    const betId: "FLIGHT_1" | "FLIGHT_2" = index === 0 ? "FLIGHT_1" : "FLIGHT_2";
+    const currentBet = flightBetResults.find((bet) => bet.id === betId);
+    if (!activeFlight || cashoutPendingRef.current[index] || currentBet?.state !== "active") return;
     const flight = activeFlight;
-    busyRef.current = true;
-    setBusy(true);
-    setCashoutPending(true);
-    setActiveFlight(null);
+    cashoutPendingRef.current[index] = true;
+    setCashoutPendingBays([...cashoutPendingRef.current] as [boolean, boolean]);
+    const optimisticMultiplier = flightMultiplier;
+    setFlightBetResults((items) => items.map((item) => item.id === betId ? { ...item, state: "cashed_out", cashOutMultiplier: optimisticMultiplier, payout: Math.round(item.amount * optimisticMultiplier * 100) / 100 } : item));
     setError(null);
     SoundManager.play("cashout");
     try {
-      const response = await ServerResultService.cashout("flight-x", flight.roundId);
-      finishFlight(response.round);
+      const response = await ServerResultService.cashout("flight-x", flight.roundId, betId);
+      if (response.round.status === "PLAYING") {
+        setActiveFlight(response.round);
+        setFlightBetResults(response.round.bets);
+        setBalance(response.round.balance);
+        void wallet.refreshWallet();
+      } else finishFlight(response.round);
     } catch (caught) {
-      setCashoutPending(false);
       const refreshed = await loadState().catch(() => null);
-      if (refreshed?.latestRound?.roundId === flight.roundId) finishFlight(refreshed.latestRound, refreshed);
+      if (refreshed?.latestRound?.roundId === flight.roundId) {
+        finishFlight(refreshed.latestRound, refreshed);
+      }
+      else if (refreshed?.activeRound?.roundId === flight.roundId) setFlightBetResults(refreshed.activeRound.bets);
       else setError(caught instanceof Error ? caught.message : "Cash out could not be completed.");
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      cashoutPendingRef.current[index] = false;
+      setCashoutPendingBays([...cashoutPendingRef.current] as [boolean, boolean]);
     }
-  }, [activeFlight, finishFlight, loadState]);
+  }, [activeFlight, finishFlight, flightBetResults, flightMultiplier, loadState, wallet]);
 
   useEffect(() => {
-    if (!activeFlight || activeFlightBay === null) return;
-    const bay = flightBays[activeFlightBay];
-    if (bay?.autoEnabled && flightMultiplier >= bay.autoCashout && !busyRef.current) void cashOut();
-  }, [activeFlight, activeFlightBay, cashOut, flightBays, flightMultiplier]);
+    if (!activeFlight) return;
+    flightBays.forEach((bay, index) => {
+      const id = index === 0 ? "FLIGHT_1" : "FLIGHT_2";
+      if (bay.autoEnabled && flightMultiplier >= bay.autoCashout && flightBetResults.find((bet) => bet.id === id)?.state === "active") void cashOut(index);
+    });
+  }, [activeFlight, cashOut, flightBetResults, flightBays, flightMultiplier]);
 
   const continueRound = () => {
     setCelebrating(false);
@@ -462,7 +489,9 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     setCountdown(0);
     if (gameId === "flight-x") {
       setActiveFlightBay(null);
-      setCashoutPending(false);
+      flightLaunchBetsRef.current = new Map();
+      setFlightBetResults([]);
+      setCashoutPendingBays([false, false]);
     }
     if (!singleAction) setBets(new Map());
   };
@@ -474,7 +503,9 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
       setPhase("BETTING");
       setCountdown(0);
       setActiveFlightBay(null);
-      setCashoutPending(false);
+      flightLaunchBetsRef.current = new Map();
+      setFlightBetResults([]);
+      setCashoutPendingBays([false, false]);
     }, 2600);
     return () => window.clearTimeout(timer);
   }, [gameId, phase]);
@@ -482,8 +513,17 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   const launchFlightBay = (index: number) => {
     const bay = flightBays[index];
     if (!bay) return;
-    const flightBet = new Map([[defaultOption, bay.amount]]);
-    void runRound(flightBet, index);
+    const id = index === 0 ? "FLIGHT_1" : "FLIGHT_2";
+    const next = new Map(flightLaunchBetsRef.current);
+    next.set(id, bay.amount);
+    const nextStake = [...next.values()].reduce((sum, amount) => sum + amount, 0);
+    if (nextStake > balance || nextStake > limits.maxStake) {
+      setError(nextStake > balance ? "Your balance is lower than the selected stakes." : `Maximum total stake is ${limits.maxStake.toLocaleString()} CR.`);
+      return;
+    }
+    flightLaunchBetsRef.current = next;
+    setFlightBetResults((items) => [...items.filter((item) => item.id !== id), { id, amount: bay.amount, state: "placed", cashOutMultiplier: null, payout: 0 }]);
+    if (phase === "BETTING") void runRound(next, index);
   };
 
   const repeat = () => {
@@ -573,17 +613,19 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
       multiplier={flightMultiplier}
       bays={flightBays}
       activeBay={activeFlightBay}
+      roundKey={activeFlight?.roundId ?? round?.roundId ?? state.sessionId}
       chips={limits.chipDenominations}
       maxStake={limits.maxStake}
       busy={busy}
-      cashoutPending={cashoutPending}
+      cashoutPendingBays={cashoutPendingBays}
+      betResults={flightBetResults}
       muted={muted}
       onToggleMuted={() => setMuted(!muted)}
       onRules={() => setRulesOpen(true)}
       onHistory={() => setHistoryOpen(true)}
       onBaysChange={setFlightBays}
       onLaunch={launchFlightBay}
-      onCashout={() => void cashOut()}
+      onCashout={(index) => void cashOut(index)}
     />
     {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}
     {rulesOpen && <GameRulesModal game={game} close={() => setRulesOpen(false)} />}
@@ -603,7 +645,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
       {singleAction && <div className="premium-simple-steps" aria-hidden="true"><span><b>1</b><WalletCards /> AMOUNT</span><i>›</i><span><b>2</b>{game.mode === "crash" ? <Plane /> : <Sparkles />} PLAY</span>{game.mode === "crash" && <><i>›</i><span><b>3</b><Coins /> CASH OUT</span></>}</div>}
       <div className={`premium-control-deck ${singleAction ? "simple" : ""}`}>
         <div className="premium-stake-picker"><small>{singleAction ? "1 · CHOOSE AMOUNT" : "CHIPS"}</small><ChipSelector chips={limits.chipDenominations} selected={selectedChip} setSelected={chooseChip} disabled={controlsDisabled} /></div>
-        {activeFlight ? <button className="premium-cashout-button" disabled={busy} onClick={() => void cashOut()} aria-label={`Cash out ${Math.round(totalStake * flightMultiplier)} credits`}><Plane /><span><small>{busy ? "CASHING OUT…" : "TAP TO CASH OUT"}</small><b>{(totalStake * flightMultiplier).toLocaleString("en-PK", { maximumFractionDigits: 2 })} CR</b></span></button> : <button className="premium-play-button" disabled={controlsDisabled || totalStake < limits.minStake || totalStake > balance} onClick={() => void runRound()}><Sparkles /><span><small>{phase === "BETTING" ? actionLabel : phase === "CLOSED" ? `STARTING ${countdown || "…"}` : "ROUND IN MOTION"}</small><b>{totalStake ? `${totalStake.toLocaleString()} CR` : "CHOOSE AMOUNT"}</b></span></button>}
+        {activeFlight ? <button className="premium-cashout-button" disabled={busy} onClick={() => void cashOut(0)} aria-label={`Cash out ${Math.round(totalStake * flightMultiplier)} credits`}><Plane /><span><small>{busy ? "CASHING OUT…" : "TAP TO CASH OUT"}</small><b>{(totalStake * flightMultiplier).toLocaleString("en-PK", { maximumFractionDigits: 2 })} CR</b></span></button> : <button className="premium-play-button" disabled={controlsDisabled || totalStake < limits.minStake || totalStake > balance} onClick={() => void runRound()}><Sparkles /><span><small>{phase === "BETTING" ? actionLabel : phase === "CLOSED" ? `STARTING ${countdown || "…"}` : "ROUND IN MOTION"}</small><b>{totalStake ? `${totalStake.toLocaleString()} CR` : "CHOOSE AMOUNT"}</b></span></button>}
       </div>
     </BettingPanel>
     {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}

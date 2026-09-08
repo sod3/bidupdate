@@ -272,13 +272,17 @@ export function createPremiumOutcome(gameId: PremiumGameId, seed: string, select
 
 export function createFlightCrash(seed: string) {
   const rng = new RNGService(seed);
-  const survivalFactor = VERY_HARD_PLAYER_TARGET_WIN_PERCENT / 100;
-  const multiplier = Math.min(100, Math.max(1, Math.floor((survivalFactor / (1 - rng.float())) * 100) / 100));
+  // A crash curve uses a house factor near one, not the target win-rate used
+  // by the fixed-outcome games. The old 0.10 numerator made ~90% of flights
+  // end at exactly 1.00x. A 0.90 factor keeps the game difficult (10% instant
+  // crashes and 55% below 2x) while still producing playable flights.
+  const houseFactor = 0.9;
+  const multiplier = Math.max(1, Math.floor((houseFactor / (1 - rng.float())) * 100) / 100);
   return credits(multiplier);
 }
 
 export function flightMultiplierAt(elapsedMs: number) {
-  return Math.min(100, credits(Math.exp(Math.max(0, elapsedMs) / 5500)));
+  return credits(Math.exp(Math.max(0, elapsedMs) / 5500));
 }
 
 export function flightElapsedFor(multiplier: number) {
