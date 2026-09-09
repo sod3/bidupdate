@@ -17,6 +17,8 @@ function duplicateKey(error: unknown) {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === 11000);
 }
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);

@@ -2,6 +2,8 @@ import { handleRouteError, noStoreJson } from "@/lib/api";
 import { getActiveUserProfile, getCurrentUserSessionIdentity } from "@/lib/session";
 import { getWalletSnapshot, getWalletSummary } from "@/services/walletService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const identity = await getCurrentUserSessionIdentity();

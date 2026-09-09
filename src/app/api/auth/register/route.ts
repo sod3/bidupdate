@@ -29,6 +29,8 @@ const schema = z.object({
   referralCode: z.string().trim().toUpperCase().regex(/^[A-Z2-9]{6,12}$/).optional().or(z.literal("")),
 });
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request) {
   try {
     assertSameOrigin(request);

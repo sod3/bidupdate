@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Gamepad2, Gift, Search, X } from "lucide-react";
 import { GameCard } from "@/components/games/GameCard";
+import { GamePreviewModal } from "@/components/games/GamePreviewModal";
 import { customerCopy } from "@/lib/customerCopy";
-import { orderedGames } from "@/lib/games";
+import { orderedGames, type GameItem } from "@/lib/games";
 import { canBackgroundPreload, preloadPremiumCore } from "@/lib/gamePrefetch";
 
 const categories = [
@@ -26,6 +27,7 @@ export function GameCatalogue({ title = "Games" }: { title?: string }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [showWelcome, setShowWelcome] = useState(false);
+  const [previewGame, setPreviewGame] = useState<GameItem | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,9 +44,6 @@ export function GameCatalogue({ title = "Games" }: { title?: string }) {
 
     const prepare = () => {
       if (cancelled) return;
-      // The first eight catalogue games share this renderer. Warm it only after
-      // the browser has finished the initial page load so game JS can never
-      // compete with the homepage artwork for the critical network path.
       void preloadPremiumCore().catch(() => undefined);
       orderedGames.slice(0, 10).forEach((game, index) => {
         window.setTimeout(() => { if (!cancelled) router.prefetch(game.slug); }, index * 45);
@@ -145,7 +144,7 @@ export function GameCatalogue({ title = "Games" }: { title?: string }) {
 
       {visibleGames.length ? (
         <div className="mt-3 grid grid-cols-1 gap-3 min-[350px]:grid-cols-2 lg:grid-cols-3 lg:gap-4 xl:grid-cols-4">
-          {visibleGames.map((game, index) => <GameCard key={game.id} game={game} priority={index < 2} />)}
+          {visibleGames.map((game, index) => <GameCard key={game.id} game={game} priority={index < 2} onPreview={setPreviewGame} />)}
         </div>
       ) : (
         <div className="mt-6 rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center">
@@ -153,6 +152,10 @@ export function GameCatalogue({ title = "Games" }: { title?: string }) {
           <p className="mt-3 font-bold text-slate-900">{query ? "No games found" : customerCopy.noGames}</p>
           <button type="button" onClick={() => { setCategory("all"); setQuery(""); }} className="mt-4 min-h-11 rounded-xl bg-teal-700 px-5 font-bold text-white">View all games</button>
         </div>
+      )}
+
+      {previewGame && (
+        <GamePreviewModal game={previewGame} onClose={() => setPreviewGame(null)} />
       )}
     </section>
   );

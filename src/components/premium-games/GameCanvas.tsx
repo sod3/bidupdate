@@ -105,11 +105,10 @@ export function GameCanvas({ accent, accent2, active, mode }: { accent: string; 
         });
 
         streaks.forEach((item, index) => {
-          item.node.visible = isActive;
-          if (!isActive) return;
-          item.node.alpha = 0.09 + (index % 3) * 0.035;
-          item.node.x += item.speed * ticker.deltaTime * (mode === "crash" ? 3.2 : 1.8);
-          item.node.y -= item.speed * ticker.deltaTime * (mode === "crash" ? 1.2 : 0.35);
+          item.node.visible = isActive || mode === "crash";
+          item.node.alpha = (isActive ? 0.22 : 0.12) + (index % 3) * 0.035;
+          item.node.x += item.speed * ticker.deltaTime * (mode === "crash" ? (isActive ? 3.8 : 2.0) : 1.8);
+          item.node.y -= item.speed * ticker.deltaTime * (mode === "crash" ? (isActive ? 1.4 : 0.7) : 0.35);
           if (item.node.x > width + 120 || item.node.y < -30) {
             item.node.x = -130 - Math.random() * 180;
             item.node.y = height * (0.35 + Math.random() * 0.65);

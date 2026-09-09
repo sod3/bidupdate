@@ -3,6 +3,8 @@ import { RacingProfile, Wallet } from "@/models";
 import { ensurePlatformData } from "@/services/bootstrapService";
 import { getLiveBotLeaders, mergeLeaderboardEntries, type LeaderboardEntry } from "@/services/leaderboardService";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     await ensurePlatformData();

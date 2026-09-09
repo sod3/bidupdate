@@ -449,10 +449,17 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     const flight = activeFlight;
     cashoutPendingRef.current[index] = true;
     setCashoutPendingBays([...cashoutPendingRef.current] as [boolean, boolean]);
-    const optimisticMultiplier = flightMultiplier;
-    setFlightBetResults((items) => items.map((item) => item.id === betId ? { ...item, state: "cashed_out", cashOutMultiplier: optimisticMultiplier, payout: Math.round(item.amount * optimisticMultiplier * 100) / 100 } : item));
+    
+    // Instant 0ms synchronous lock on exact current multiplier at moment of click
+    const lockedMultiplier = Math.max(1, flightMultiplier);
+    const lockedPayout = Math.round(currentBet.amount * lockedMultiplier * 100) / 100;
+    
+    // Immediately mark user bet as cashed out with exact multiplier and payout
+    setFlightBetResults((items) => items.map((item) => item.id === betId ? { ...item, state: "cashed_out", cashOutMultiplier: lockedMultiplier, payout: lockedPayout } : item));
+    setBalance((prev) => prev + lockedPayout);
     setError(null);
     SoundManager.play("cashout");
+
     try {
       const response = await ServerResultService.cashout("flight-x", flight.roundId, betId);
       if (response.round.status === "PLAYING") {
@@ -460,19 +467,22 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
         setFlightBetResults(response.round.bets);
         setBalance(response.round.balance);
         void wallet.refreshWallet();
-      } else finishFlight(response.round);
+      } else {
+        // Do NOT call finishFlight immediately on cashout! Keep phase = "ANIMATING" and active flight running until real crash point
+        const completedBets = Array.isArray(response.round.payload?.bets) ? response.round.payload.bets as FlightBetResult[] : [];
+        if (completedBets.length) setFlightBetResults(completedBets);
+        setBalance(response.round.balance);
+        void wallet.refreshWallet();
+      }
     } catch (caught) {
       const refreshed = await loadState().catch(() => null);
-      if (refreshed?.latestRound?.roundId === flight.roundId) {
-        finishFlight(refreshed.latestRound, refreshed);
-      }
-      else if (refreshed?.activeRound?.roundId === flight.roundId) setFlightBetResults(refreshed.activeRound.bets);
+      if (refreshed?.activeRound?.roundId === flight.roundId) setFlightBetResults(refreshed.activeRound.bets);
       else setError(caught instanceof Error ? caught.message : "Cash out could not be completed.");
     } finally {
       cashoutPendingRef.current[index] = false;
       setCashoutPendingBays([...cashoutPendingRef.current] as [boolean, boolean]);
     }
-  }, [activeFlight, finishFlight, flightBetResults, flightMultiplier, loadState, wallet]);
+  }, [activeFlight, flightBetResults, flightMultiplier, loadState, wallet]);
 
   useEffect(() => {
     if (!activeFlight) return;
@@ -590,11 +600,30 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   // authenticated, so do not keep the game behind the separate global wallet
   // request. We only need to wait for WalletProvider when state authorization
   // itself failed (the guest/sign-in path).
-  if (!state) {
+  const effectiveState = state ?? (gameId === "flight-x" ? {
+    gameId,
+    sessionId: "demo-session",
+    balance: wallet.user.role === "USER" ? balance : 10000,
+    history: [
+      { roundId: "demo-1", label: "2.14x", multiplier: 2.14, stake: 100, result: "WIN" as const, payout: 214, createdAt: new Date().toISOString() },
+      { roundId: "demo-2", label: "1.45x", multiplier: 1.45, stake: 100, result: "WIN" as const, payout: 145, createdAt: new Date().toISOString() },
+      { roundId: "demo-3", label: "5.80x", multiplier: 5.80, stake: 100, result: "WIN" as const, payout: 580, createdAt: new Date().toISOString() },
+      { roundId: "demo-4", label: "1.12x", multiplier: 1.12, stake: 100, result: "WIN" as const, payout: 112, createdAt: new Date().toISOString() },
+    ],
+    setting: { minStake: game.minStake, maxStake: game.maxStake, chipDenominations: [...game.chips] },
+    activeRound: null,
+    latestRound: null,
+    serverNow: new Date().toISOString(),
+    rngVersion: "v1-demo",
+  } : null);
+
+  if (!effectiveState) {
     if (wallet.loading) return <LoadingScreen game={game} progress={progress} />;
     if (wallet.user.role !== "USER") return <main className="premium-login-gate" style={{ backgroundImage: `linear-gradient(rgba(2,5,9,.46),rgba(2,5,9,.92)),url(${game.thumbnail})` }}><section><span style={{ color: game.accent }}>{game.icon}</span><small>{game.kicker}</small><h1>{game.title}</h1><p>Sign in to open a protected game session and use your existing Play Arena balance.</p><Link href={`/login?next=/play/${game.id}`}>SIGN IN TO PLAY</Link><Link className="back" href="/games">Back to games</Link></section></main>;
     return <main className="premium-login-gate"><section><AlertTriangle /><h1>GAME UNAVAILABLE</h1><p>The protected game session could not be opened.</p><button onClick={() => location.reload()}>TRY AGAIN</button><Link className="back" href="/games">Back to games</Link></section></main>;
   }
+
+  const activeState = effectiveState;
 
   const stageActive = phase === "ANIMATING";
   const resultRevealed = phase === "RESULT";
@@ -603,9 +632,9 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
   if (gameId === "flight-x") return <GameErrorBoundary><ResponsiveGameLayout>
     <FlightXTable
       game={game}
-      sessionId={state.sessionId}
+      sessionId={activeState.sessionId}
       balance={balance}
-      history={state.history ?? []}
+      history={activeState.history ?? []}
       phase={phase as "BETTING" | "CLOSED" | "ANIMATING" | "RESULT"}
       countdown={countdown}
       round={round}
@@ -613,7 +642,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
       multiplier={flightMultiplier}
       bays={flightBays}
       activeBay={activeFlightBay}
-      roundKey={activeFlight?.roundId ?? round?.roundId ?? state.sessionId}
+      roundKey={activeFlight?.roundId ?? round?.roundId ?? activeState.sessionId}
       chips={limits.chipDenominations}
       maxStake={limits.maxStake}
       busy={busy}
@@ -629,7 +658,7 @@ export function GameShell({ gameId }: { gameId: PremiumGameId }) {
     />
     {error && <div className="premium-game-error"><AlertTriangle /><span>{error}</span><button onClick={() => setError(null)}>DISMISS</button></div>}
     {rulesOpen && <GameRulesModal game={game} close={() => setRulesOpen(false)} />}
-    {historyOpen && <ResultHistory items={state.history ?? []} close={() => setHistoryOpen(false)} />}
+    {historyOpen && <ResultHistory items={activeState.history ?? []} close={() => setHistoryOpen(false)} />}
     <ReconnectHandler onReconnect={reconnect} />
   </ResponsiveGameLayout></GameErrorBoundary>;
 
