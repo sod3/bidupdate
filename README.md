@@ -51,7 +51,7 @@ npm run db:seed
 npm run dev
 ```
 
-The local command starts the self-hosting wrapper on port 3000. Browser gameplay uses the same Next.js HTTP route handlers in local and deployed environments; the legacy Socket.IO listener is not required by any game client.
+The local command starts the self-hosting wrapper on port 3000. Eight Ball uses the authenticated Socket.IO transport with the same authoritative HTTP API as its recovery transport. Other games use their existing HTTP route handlers.
 
 ## Vercel deployment
 
@@ -59,7 +59,23 @@ Set `MONGODB_URI`, `MONGODB_DB`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `JWT_SECRET`, 
 
 Use Vercel's standard Next.js build (`npm run build`). Do not configure `scripts/server.mjs` as a Vercel entry point: custom Next.js servers are not executed by a normal Vercel deployment. The original five action-game clients call `/api/gameplay/[game]`; Teen Patti uses its dedicated `/api/teen-patti` round endpoint. Both run as Node.js route handlers and persist match state in MongoDB across function invocations.
 
-After deployment, `POST /api/gameplay/racing` without an authenticated session should return `401`, not `404`, and no browser request should be made to `/race-socket`.
+After deployment, `POST /api/gameplay/racing` without an authenticated session should return `401`, not `404`. Eight Ball obtains its realtime origin and path from `/api/eight-ball/session`:
+
+| Deployment | Socket endpoint | API destination |
+| --- | --- | --- |
+| `npm run dev` / self-hosted `npm start` | Same origin, `/race-socket` | Local Next server |
+| Vercel | Same origin, `/api/race-socket/socket.io` | `POOL_API_ORIGIN` or HTTPS `VERCEL_URL` |
+| External socket host | `POOL_SOCKET_URL` + `POOL_SOCKET_PATH` | Configure that host's pool API origin |
+
+`api/race-socket.mjs` is a Vercel HTTP-server function, separate from the Next custom server. Vercel WebSocket functions require **Fluid compute**. The implementation follows [Vercel's Socket.IO function deployment guide](https://vercel.com/docs/functions/websockets). Enable that project setting and verify the deployed function accepts an Engine.IO 4 WebSocket handshake at the advertised path. `next build` verifies the Next app, but does not verify Vercel's function routing or project settings.
+
+Use HTTPS public origins (the client negotiates WSS). For an external socket host, set `RACE_ALLOWED_ORIGINS` to a comma-separated list of exact frontend origins. Same-host connections are allowed; other browser origins are rejected during upgrade, independently of CORS. All connections still require a signed game JWT. A reverse proxy must forward `Upgrade` and `Connection` headers and preserve the advertised path. WebSocket-only transport avoids polling affinity requirements; MongoDB remains authoritative across instances and reconnects.
+
+When Deployment Protection guards the API destination, supply `VERCEL_AUTOMATION_BYPASS_SECRET` to the socket function or configure an appropriate reachable `POOL_API_ORIGIN`. Never expose either server secret in a public environment variable. Socket authentication refreshes before token expiry; reconnect uses exponential backoff with jitter, then reloads the saved match. HTTP polling continues during outages without locking aim input. Unacknowledged shots are reconciled through STATUS, never blindly resubmitted.
+
+Handshake failures log `[game-socket] handshake failed` with code/message and no tokens or cookies. Inspect those function logs and the `/api/eight-ball/live` responses after deployment. Without active viewers, the Vercel function stops ticking; persisted disconnect/deadline decisions are reconciled on the next authenticated request. The self-hosted process continues ticking without viewers.
+
+Pool verification: run `npm test`, `npm run build`, then `npm run test:pool:browser` (install Chromium once with `npx playwright install chromium`). Browser tests use isolated network fixtures and the real renderer/physics; they never submit application wallet transactions. `npm run test:pool:integration` separately exercises real MongoDB transactions in a uniquely named `pool_qa_*` database and removes only that database afterward. Emulated iPhone/Android profiles are not physical-device Safari/Android certification.
 
 ## JazzCash and Easypaisa payment review
 

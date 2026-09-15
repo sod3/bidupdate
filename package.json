@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:pool:browser": "playwright test",
+    "test:pool:integration": "node --env-file=.env --import tsx scripts/pool-integration.ts",
     "db:seed": "node --env-file=.env --import tsx scripts/seed.ts",
     "smoke": "node --env-file=.env --import tsx scripts/smoke.ts"
   },
@@ -32,6 +34,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.13.0",
     "@types/react": "^19.2.18",

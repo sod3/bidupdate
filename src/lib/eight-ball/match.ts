@@ -28,7 +28,7 @@ export function resolveShot(state: MatchState, before: PoolBallState[], report: 
   const breakFoul = state.opening && !report.pots.some(n => n > 0) && new Set(report.railsAfter.filter(n => n > 0)).size < 4;
   const foul = report.scratch || !legal || breakFoul || (!state.opening && report.pots.length === 0 && report.railsAfter.length === 0);
   if (state.opening && (report.pots.includes(8) || breakFoul)) {
-    state.balls = createRack(); state.turn = foul ? other : shooter; state.reason = "Break re-racked"; return;
+    state.balls = createRack(); state.ballInHand = false; state.groups = [null,null]; state.turn = foul ? other : shooter; state.reason = "Break re-racked"; return;
   }
   if (report.pots.includes(8)) {
     state.winner = group && remaining === 0 && !foul ? shooter : other;
@@ -51,7 +51,7 @@ export function simulateShot(source: PoolBallState[], input: Shot, capture = tru
   const report: Report = { firstHit: null, pots: [], railsAfter: [], scratch: false };
   const frame = () => balls.map(b => [b.number, +b.x.toFixed(5), +b.z.toFixed(5), b.pocketed ? 1 : 0, +b.rotationX.toFixed(3), +b.rotationZ.toFixed(3)]);
   if (capture) frames.push(frame());
-  strikeCueBall(balls, input.angle, input.power, input.spin);
+  if (!strikeCueBall(balls, input.angle, input.power, input.spin)) throw new Error("Place the cue ball before shooting.");
   let step = 0;
   // Fixed 240 Hz steps prevent tunnelling at maximum break velocity.
   for (; step < 7200 && ballsAreMoving(balls); step++) {
@@ -67,7 +67,7 @@ export function simulateShot(source: PoolBallState[], input: Shot, capture = tru
     if (capture && step % 8 === 7) frames.push(frame());
   }
   balls.forEach(b => { b.vx = 0; b.vz = 0; });
-  if (capture) frames.push(frame());
+  if (capture && step % 8 !== 0) frames.push(frame());
   report.scratch = report.pots.includes(0);
-  return { balls, frames, report, sounds, duration: (frames.length - 1) / 30 * 1000 };
+  return { balls, frames, report, sounds, duration: Math.ceil(step / 8) / 30 * 1000 };
 }

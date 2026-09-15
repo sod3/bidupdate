@@ -15,8 +15,10 @@ function candidates(balls: PoolBallState[], group: BallGroup | null): Shot[] {
     ])];
     for (const dest of destinations) {
       const dx = dest.x - target.x, dz = dest.z - target.z, length = Math.hypot(dx, dz);
+      if (length < 1e-8) continue;
       const gx = target.x - dx / length * BALL_RADIUS * 2, gz = target.z - dz / length * BALL_RADIUS * 2;
       const dist = Math.hypot(gx - cue.x, gz - cue.z);
+      if (dist < 1e-8) continue;
       const cosine = ((gx - cue.x) * dx + (gz - cue.z) * dz) / (dist * length);
       if (cosine < .22 || Math.abs(gx) > TABLE_HALF_WIDTH || Math.abs(gz) > TABLE_HALF_LENGTH) continue;
       if (!pathClear(balls, cue.x, cue.z, gx, gz, new Set([0, target.number]))) continue;

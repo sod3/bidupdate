@@ -91,7 +91,8 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number, re
   events.collisions.length = 0;
   events.railHits.length = 0;
   events.pocketed.length = 0;
-  const dt = Math.min(.018, Math.max(.001, deltaSeconds));
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return events;
+  const dt = Math.min(.018, deltaSeconds);
   for (const ball of balls) {
     if (ball.pocketed) continue;
     const speedSquared = ball.vx * ball.vx + ball.vz * ball.vz;
@@ -198,6 +199,7 @@ export function ballsAreMoving(balls: PoolBallState[]) {
 }
 
 export function strikeCueBall(balls: PoolBallState[], angle: number, power: number, spin: SpinInput) {
+  if (![angle,power,spin.x,spin.y].every(Number.isFinite)) return false;
   const cue = balls.find((ball) => ball.number === 0);
   if (!cue || cue.pocketed) return false;
   const speed = Math.max(.05, Math.min(1, power)) * MAX_SHOT_SPEED;
@@ -236,7 +238,9 @@ export function predictAim(balls: PoolBallState[], angle: number): AimPrediction
   }
   const railX = dirX > .001 ? (TABLE_HALF_WIDTH - cue.x) / dirX : dirX < -.001 ? (-TABLE_HALF_WIDTH - cue.x) / dirX : Infinity;
   const railZ = dirZ > .001 ? (TABLE_HALF_LENGTH - cue.z) / dirZ : dirZ < -.001 ? (-TABLE_HALF_LENGTH - cue.z) / dirZ : Infinity;
-  distance = Math.min(distance, railX > 0 ? railX : Infinity, railZ > 0 ? railZ : Infinity);
+  const railDistance = Math.min(railX > 0 ? railX : Infinity, railZ > 0 ? railZ : Infinity);
+  if (railDistance < distance) target = null;
+  distance = Math.min(distance, railDistance);
   const endX = cue.x + dirX * distance;
   const endZ = cue.z + dirZ * distance;
   if (!target) return { endX, endZ, targetNumber: null, objectEndX: null, objectEndZ: null };

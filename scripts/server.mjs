@@ -2,8 +2,7 @@ import { installPoolLive } from "./pool-live.mjs";
 import { createServer } from "node:http";
 import { randomInt, randomUUID } from "node:crypto";
 import next from "next";
-import { Server as SocketIOServer } from "socket.io";
-import { jwtVerify } from "jose";
+import { createGameSocket } from "./pool-socket.mjs";
 import { isAiFavoredRoll } from "./game-ai.mjs";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -69,12 +68,6 @@ const dummyOpponentNames = [
   "Ilyas Rune", "Maya Corin", "Omar Vail", "Zain Orra", "Leena Frost", "Rayen Knox",
   "Sora Venn", "Dani Rowan", "Imran Hale", "Nora Syl", "Kareem Pike", "Alina Wren",
 ];
-
-function authSecret() {
-  const value = process.env.JWT_SECRET;
-  if (!value || value.length < 32) throw new Error("JWT_SECRET must contain at least 32 characters.");
-  return new TextEncoder().encode(value);
-}
 
 async function persist(body) {
   const secret = process.env.RACE_SERVER_SECRET || process.env.JWT_SECRET;
@@ -803,22 +796,9 @@ function flagViolation(io, match, player, rule, telemetry) {
 
 await app.prepare();
 const httpServer = createServer((request, response) => handle(request, response));
-const io = new SocketIOServer(httpServer, { path: "/race-socket", serveClient: false, transports: ["websocket"], maxHttpBufferSize: 24_000, pingInterval: 10_000, pingTimeout: 12_000 });
+const io = createGameSocket(httpServer);
 
-io.use(async (socket, nextMiddleware) => {
-  try {
-    const token = socket.handshake.auth?.token;
-    if (typeof token !== "string") throw new Error("Missing race token.");
-    const { payload } = await jwtVerify(token, authSecret(), { algorithms: ["HS256"], issuer: "neon-drift-web", audience: "neon-drift-race-server" });
-    if (!payload.sub || typeof payload.username !== "string") throw new Error("Invalid race identity.");
-    socket.data.driver = { id: payload.sub, username: payload.username, level: Number(payload.level) || 1, rank: typeof payload.rank === "string" ? payload.rank : "Bronze III", winStreak: Number(payload.winStreak) || 0 };
-    nextMiddleware();
-  } catch (error) {
-    nextMiddleware(new Error(error instanceof Error ? error.message : "Race authentication failed."));
-  }
-});
-
-installPoolLive(io, port);
+installPoolLive(io, `http://127.0.0.1:${port}`);
 
 io.on("connection", (socket) => {
   const identity = socket.data.driver;

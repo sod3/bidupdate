@@ -8,9 +8,11 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const input = await request.json() as Record<string, unknown>;
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError("Invalid table command.");
     const expected = process.env.RACE_SERVER_SECRET || process.env.JWT_SECRET || "";
     const received = request.headers.get("x-pool-server-secret") || "";
-    const trusted = expected.length >= 32 && received.length === expected.length && timingSafeEqual(Buffer.from(expected), Buffer.from(received));
+    const expectedBytes=Buffer.from(expected),receivedBytes=Buffer.from(received);
+    const trusted = expected.length >= 32 && receivedBytes.length === expectedBytes.length && timingSafeEqual(expectedBytes,receivedBytes);
     if (trusted) {
       if (input.action === "TICK") {
         const ids = Array.isArray(input.users) ? input.users.filter((id): id is string => typeof id === "string") : [];

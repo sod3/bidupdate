@@ -96,6 +96,13 @@ export async function poolCommand(userId: string, input: Record<string, unknown>
       const state = doc.state, player = state.players.findIndex(p => p.id === userId);
       if (player < 0) return fail("You are not seated at this table.");
       const expired = now - state.players[player].lastSeen > 30000;
+      if (input.action === "STATUS" && (!expired || state.winner !== null)) {
+        // Heartbeats must not rewrite the entire recorded shot or contend with
+        // unrelated match fields while either client is watching the balls.
+        await PoolLiveMatch.updateOne({ key: state.id }, { $set: { [`state.players.${player}.lastSeen`]: now } }, { session });
+        await PoolSeat.updateOne({ userId }, { $set: { seen: now } }, { session });
+        return;
+      }
       if (expired && state.winner === null) { state.winner = 1 - player; state.reason = "Reconnect window expired"; state.version++; }
       state.players[player].lastSeen = now;
       if (input.action === "LEAVE" && state.settled) { await PoolSeat.deleteOne({ userId }, { session }); return; }
@@ -108,7 +115,9 @@ export async function poolCommand(userId: string, input: Record<string, unknown>
           state.ballInHand = false; state.version++;
         } else {
           if (state.ballInHand) return fail("Place the cue ball first.");
-          shoot(state, { angle: Number(input.angle), power: Number(input.power), spin: { x: Number((input.spin as { x?: number })?.x), y: Number((input.spin as { y?: number })?.y) } }, now);
+          const shot={ angle: Number(input.angle), power: Number(input.power), spin: { x: Number((input.spin as { x?: number })?.x), y: Number((input.spin as { y?: number })?.y) } };
+          if (![shot.angle,shot.power,shot.spin.x,shot.spin.y].every(Number.isFinite)||shot.power<.05||shot.power>1||Math.abs(shot.spin.x)>1||Math.abs(shot.spin.y)>1) return fail("Invalid shot.");
+          shoot(state, shot, now);
         }
       }
       if (input.action === "RESIGN" && state.winner === null) { state.winner = 1 - player; state.reason = "Match conceded"; state.version++; }
@@ -149,6 +158,8 @@ export async function tickPool() {
     if (!doc) return;
     const state = doc.state;
     const absent = state.players.findIndex(p => !p.isBot && now - p.lastSeen > 30000);
+    const botDue = state.players[state.turn].isBot && now >= state.readyAt + 800 + (state.version * 791 % 1701);
+    if (state.winner === null && absent < 0 && !botDue && now < state.deadline) return;
     if (absent >= 0 && state.winner === null) { state.winner = 1 - absent; state.reason = "Opponent disconnected"; state.version++; }
     if (state.winner === null && now >= state.readyAt) {
       const thinkMs = 800 + (state.version * 791 % 1701);

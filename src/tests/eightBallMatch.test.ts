@@ -1,9 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { economics, newMatch, resolveShot, simulateShot, type Report } from "../lib/eight-ball/match";
 import { cloneBalls, createRack, validCuePlacement } from "../lib/eight-ball/physics";
+import { planExpertShot } from "../lib/eight-ball/expert";
 const match = () => newMatch("test", 100, [0,1].map(i=>({id:String(i),username:`Player ${i}`,level:1,rank:"Bronze III",isBot:false,lastSeen:0})),0);
 const report = (patch: Partial<Report> = {}): Report => ({ firstHit:1,pots:[],railsAfter:[1],scratch:false,...patch });
 describe("authoritative pool rules",()=>{
+ it("plays a complete rack through legal shots, turns, fouls and a winner",()=>{
+  const s=match();let shots=0;
+  for(;shots<100&&s.winner===null;shots++){
+   if(s.ballInHand){let placed=false;for(let z=-1.7;z<=1.8&&!placed;z+=.21)for(let x=-.9;x<=.9&&!placed;x+=.21){if(validCuePlacement(x,z,s.balls)){Object.assign(s.balls[0],{x,z,pocketed:false,vx:0,vz:0});s.ballInHand=false;placed=true;}}expect(placed).toBe(true);}
+   const before=cloneBalls(s.balls),shot=planExpertShot(s.balls,s.groups[s.turn],s.opening,()=>.5),result=simulateShot(s.balls,shot,false);
+   s.balls=result.balls;resolveShot(s,before,result.report);
+   expect(s.balls.every(b=>[b.x,b.z,b.vx,b.vz].every(Number.isFinite))).toBe(true);
+  }
+  expect(s.winner).not.toBeNull();expect(shots).toBeGreaterThan(1);
+ },60000);
  it("calculates the 90/10 pot with integer coins",()=>{expect(economics(100)).toEqual({stake:100,totalPot:200,reward:180,fee:20});expect(economics(100000).reward).toBe(180000);expect(()=>economics(101)).toThrow();});
  it("requires four distinct object balls for an unpotted break",()=>{const s=match();resolveShot(s,cloneBalls(s.balls),report({railsAfter:[1,1,1,1]}));expect(s.opening).toBe(true);expect(s.turn).toBe(1);});
  it("keeps the table open after a break pot",()=>{const s=match();resolveShot(s,cloneBalls(s.balls),report({pots:[1]}));expect(s.groups).toEqual([null,null]);expect(s.turn).toBe(0);expect(s.opening).toBe(false);});

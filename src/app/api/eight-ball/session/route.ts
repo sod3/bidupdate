@@ -64,9 +64,10 @@ export async function POST(request: Request) {
       .setExpirationTime("20m")
       .sign(gameSecret());
     const plain = profile.toObject() as unknown as Record<string, unknown>;
-    return noStoreJson({ token, playerId: user.userId, username: user.username, profile: profilePayload(plain) });
+    const socketUrl = process.env.POOL_SOCKET_URL || new URL(request.url).origin;
+    const socketPath = process.env.POOL_SOCKET_PATH || (process.env.VERCEL ? "/api/race-socket/socket.io" : "/race-socket");
+    return noStoreJson({ token, socketUrl, socketPath, playerId: user.userId, username: user.username, profile: profilePayload(plain) });
   } catch (error) {
     return handleRouteError(error);
   }
 }
-

@@ -8,3 +8,24 @@
 @media(max-width:650px) and (orientation:portrait){.lobbyHeader{height:75px;padding:0 5%;gap:15px}.brand{font-size:17px}.balance small{display:none}.balance strong{font-size:14px}.lobbyBody{display:flex;flex-direction:column;padding:30px 6%}.introduction{width:100%}.introduction h1{font-size:50px;margin:17px 0}.introduction>p{font-size:12px}.lobbyTable{height:200px;margin:5px -25px 10px}.stakePanel{width:100%;padding:25px}.lobbyFooter span:last-child{display:none}.inMatch .rotate{display:flex;position:absolute;inset:0;z-index:20;align-items:center;justify-content:center;flex-direction:column;background:#0c1725;color:#bad7df;text-align:center}.rotate svg{transform:rotate(90deg);margin:25px;color:var(--gold)}.rotate h2{font:30px Georgia}.rotate p{font-size:13px;margin-top:12px}.vsCards{gap:14px}.contender{width:135px;padding:12px}.contender .portrait{width:95px;height:107px}.contender h2{font-size:15px}.contender p{font-size:6px}.vsMark{font-size:40px;letter-spacing:-4px}.introTitle h1{letter-spacing:2px}.introBottom span{letter-spacing:1px;font-size:7px;padding-left:10px}.searchAvatar{height:107px}.searchCard{min-height:264px}}
 @media(max-height:500px) and (orientation:landscape){.hud{height:59px;padding:3px 2%}.playerHud .portrait{height:40px;width:35px}.playerHud small{font-size:6px;margin-top:2px}.ballRow{margin-top:4px}.miniBall{height:11px;width:11px;font-size:6px}.potHud strong{font-size:19px;margin:2px}.potHud>span{font-size:6px}.arena{top:59px;bottom:28px}.tableFooter{height:28px}.powerTrack{height:130px;width:24px}.powerControl{gap:5px;left:2%;transform:translateY(-35%)}.powerControl>span{font-size:6px}.introTitle{top:4%}.introTitle h1{font-size:17px;margin:6px}.introTitle>span{font-size:8px}.introTitle small{font-size:6px}.vsCards{margin-top:35px;gap:45px}.contender{width:150px;padding:10px;display:grid;grid-template-columns:1fr}.contender .portrait{width:76px;height:86px}.contender h2{font-size:15px;margin:8px 0 4px}.contender p{font-size:6px}.rank{font-size:8px;margin:7px 0}.contender>strong{font-size:13px;padding-top:6px}.vsMark{font-size:64px}.introBottom{bottom:4%}.introBottom strong{font-size:18px}.introBottom span{font-size:6px}.cancel{right:20px;left:auto;bottom:15px}.searchAvatar{height:86px}.searchAvatar svg{height:45px}.searchCard{min-height:201px}.searchDots{margin:15px}.result{padding:20px;width:340px}.resultTrophy{width:25px;height:25px;margin-bottom:10px}.result h1{font-size:32px;margin:9px 0}.result p{margin:12px}.resultCoins{font-size:24px}.result .play{padding:12px}.spinPanel{top:65px;padding:10px}.spinBall{height:85px;width:85px}.settings{padding:22px}.settings h2{font-size:24px}.settings>button:not(.close){padding:10px 0}}
 @media(prefers-reduced-motion:reduce){.root *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+/* Keep the existing table and controls usable in portrait instead of covering
+   them with the rotation prompt. Only the compact HUD layout changes. */
+@media(max-width:650px) and (orientation:portrait){
+  .inMatch .rotate{display:none}
+  .hud{height:110px;gap:4px;flex-wrap:wrap;padding:5px 3%}
+  .hud>.icon{width:28px;height:28px;flex-shrink:0}
+  .playerHud{padding:3px;gap:5px;max-width:calc(50% - 36px)}
+  .playerHud .portrait{width:28px;height:34px}
+  .playerHud>div:not(.portrait){min-width:0}
+  .playerHud strong{font-size:10px;max-width:75px}
+  .playerHud small{font-size:6px;letter-spacing:0}
+  .potHud{order:5;flex-basis:100%;min-width:0;display:flex;justify-content:center;align-items:center;gap:8px}
+  .potHud strong{font-size:16px}.potHud>span,.potHud small{font-size:6px;letter-spacing:0}
+  .miniBall{width:9px;height:9px;font-size:5px}.ballRow{gap:1px;margin-top:5px}
+  .arena{top:110px;bottom:210px}.tableFooter{height:60px;flex-wrap:wrap;justify-content:center}
+  .tableFooter strong{max-width:100%;text-align:center}
+  .powerControl{top:auto;bottom:85px;transform:none;left:4%;gap:4px}
+  .powerTrack{height:100px;width:24px}
+}
+.inMatch{height:100dvh;min-height:0}.spinBall{touch-action:none}
