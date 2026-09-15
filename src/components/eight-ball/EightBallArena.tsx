@@ -43,6 +43,7 @@ export function EightBallArena(props: Props) {
     let pointerId:number|null=null,dragStart:{x:number;z:number}|null=null,dragPower=0,gestureVersion=-1;
     let pulling=false;
     let soundId="",soundIndex=0,localAngle=0,lastAimSent=0,renderedMatchId:string|null|undefined=undefined;
+    let playbackTraceId:string|null=null,playbackTraceAt=0;
     let aimVersion=-1,aimAngle=Infinity,aimPrediction:ReturnType<typeof predictAim>|null=null;
     let ballSprites:HTMLCanvasElement[][]=[];
     const rack=createRack();
@@ -112,19 +113,27 @@ export function EightBallArena(props: Props) {
       if(resizePending||dpr!==pixelRatio){resizePending=false;resize();}
       const p=live.current,now=Date.now()+(Number.isFinite(p.clockOffset)?p.clockOffset:0),state=p.state,trace=state?.trace;
       if(state?.id!==renderedMatchId){renderedMatchId=state?.id;localAngle=Number.isFinite(p.angle)?p.angle:0;lastAimSent=localAngle;aimPrediction=null;cancelGesture();}
+      if(trace?.id!==playbackTraceId){
+        playbackTraceId=trace?.id??null;
+        // Trace timestamps are authoritative for ordering, but a response can
+        // arrive after that wall-clock window. Start playback on receipt so a
+        // slow socket/HTTP round-trip never turns a shot into a static jump.
+        playbackTraceAt=trace?Math.max(now,trace.at):0;
+      }
       if(drag&&(!p.interactive||state?.version!==gestureVersion))cancelGesture();
       if (!viewport || !backing.width || !backing.height) { raf=requestAnimationFrame(draw); return; }
       c.drawImage(backing,0,0,w,h);
       const balls:PoolBallState[]=state?.balls??rack;
-      const tracing=!!trace&&trace.frames.length>0&&now<trace.at+trace.duration;
+      const tracing=!!trace&&trace.frames.length>0&&now<playbackTraceAt+trace.duration;
       let traceA:number[][]|null=null,traceB:number[][]|null=null,traceT=0;
       if(tracing){
-        const at=clamp((now-trace.at)/1000*30,0,trace.frames.length-1),idx=Math.floor(at),a=trace.frames[idx],b=trace.frames[Math.min(idx+1,trace.frames.length-1)],t=at-idx;
+        const at=clamp((now-playbackTraceAt)/1000*30,0,trace.frames.length-1),idx=Math.floor(at),a=trace.frames[idx],b=trace.frames[Math.min(idx+1,trace.frames.length-1)],t=at-idx;
         traceA=a;traceB=b;traceT=t;
       }
       if(trace){
-        if(soundId!==trace.id){soundId=trace.id;soundIndex=0;while(soundIndex<trace.sounds.length&&trace.sounds[soundIndex].at<now-trace.at-400)soundIndex++;}
-        while(soundIndex<trace.sounds.length&&trace.sounds[soundIndex].at<=now-trace.at){const sound=trace.sounds[soundIndex++];p.onSound(sound.kind,sound.force);}
+        if(soundId!==trace.id){soundId=trace.id;soundIndex=0;}
+        const traceElapsed=Math.max(0,(now-playbackTraceAt));
+        while(soundIndex<trace.sounds.length&&trace.sounds[soundIndex].at<=traceElapsed){const sound=trace.sounds[soundIndex++];p.onSound(sound.kind,sound.force);}
       }
       const storedCue=balls.find(b=>b.number===0&&!b.pocketed);
       const cue=storedCue;

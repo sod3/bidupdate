@@ -57,7 +57,10 @@ export function EightBallExperience(){
   }
  }, [refreshWallet]);
  const {command,connected,busy,error,setError}=usePoolConnection(wallet.user.role==="USER"?wallet.user.username:null,applyView);
- const canAim=!!state&&myTurn&&state.winner===null&&now>=state.readyAt&&connected&&!busy;
+ // A saved match remains playable through the authoritative HTTP command path
+ // when the realtime transport is temporarily down. Requiring `connected`
+ // here made the cue vanish exactly when reconnect recovery was needed.
+ const canAim=!!state&&myTurn&&state.winner===null&&now>=state.readyAt&&!busy;
  useEffect(()=>{if(!state&&!queued&&!busy&&replay.current){replay.current=false;command({action:"JOIN",stake:stakeRef.current});}},[state,queued,busy,command]);
  useEffect(()=>()=>{void audio.current?.close();audio.current=null;},[]);
 
