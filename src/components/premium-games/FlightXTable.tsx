@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { ChevronLeft, Menu, Minus, Plus, Volume2, VolumeX } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { ClientHistoryItem, CompletedPremiumRound, FlightBetResult } from "@/lib/premium-games/client";
 import type { PremiumGameDefinition } from "@/lib/premium-games/definitions";
-import { visibleFlightCrashMultiplier } from "@/lib/premium-games/flightPresentation";
-import { SoundManager } from "@/lib/premium-games/soundManager";
+import { committedCrashMultiplier, createNaturalFlightCrash, effectiveFlightCrashMultiplier, flightCrashFromHistory, mergeFlightHistory, type FlightHistoryEntry } from "@/lib/premium-games/flightPresentation";
 
 type FlightPhase = "BETTING" | "CLOSED" | "ANIMATING" | "RESULT";
 
@@ -15,14 +14,14 @@ export interface FlightBetBay { amount: number; autoCashout: number; autoEnabled
 interface FlightXTableProps {
   game: PremiumGameDefinition; sessionId: string; balance: number; history: ClientHistoryItem[];
   phase: FlightPhase; countdown: number; round: CompletedPremiumRound | null; active: boolean;
-  multiplier: number; bays: readonly [FlightBetBay, FlightBetBay]; activeBay: number | null; roundKey: string;
-  chips: readonly number[]; maxStake: number; busy: boolean; cashoutPendingBays: readonly [boolean, boolean]; betResults: FlightBetResult[]; muted: boolean;
+  multiplier: number; committedCrash?: number; bays: readonly [FlightBetBay, FlightBetBay]; activeBay: number | null; roundKey: string;
+  chips: readonly number[]; maxStake: number; busy: boolean; betResults: FlightBetResult[]; muted: boolean;
   onToggleMuted: () => void; onRules: () => void; onHistory: () => void;
   onBaysChange: (bays: [FlightBetBay, FlightBetBay]) => void; onLaunch: (bay: number) => void; onCashout: (bay: number) => void;
 }
 
 interface LobbyPilot {
-  id: string; name: string; bet: number; target: number; cashout: number | null; win: number | null; hue: number; state: "active" | "cashed_out" | "lost";
+  id: string; name: string; bet: number; target: number; cashout: number | null; win: number | null; hue: number; state: "placed" | "active" | "cashed_out" | "lost";
 }
 
 interface CashoutToast {
@@ -42,18 +41,16 @@ function randomFrom(seed: number) {
   return () => { state += 0x6d2b79f5; let n = state; n = Math.imul(n ^ n >>> 15, n | 1); n ^= n + Math.imul(n ^ n >>> 7, n | 61); return ((n ^ n >>> 14) >>> 0) / 4294967296; };
 }
 
-function createLobby(seedKey: string): LobbyPilot[] {
+function createLobby(seedKey: string, initialState: LobbyPilot["state"] = "placed"): LobbyPilot[] {
   const random = randomFrom(hashSeed(seedKey || `round-${Date.now()}`));
   const amounts = [50, 100, 150, 250, 500, 1000, 2500, 5000];
   const count = 45 + Math.floor(random() * 45);
   return Array.from({ length: count }, (_, i) => {
-    const roll = random();
-    const [low, high] = roll < 0.45 ? [1.12, 1.45] : roll < 0.78 ? [1.46, 2.60] : roll < 0.93 ? [2.65, 6.50] : [6.80, 28.00];
-    const target = Math.round((low + Math.pow(random(), 1.6) * (high - low)) * 100) / 100;
+    const target = Math.min(100, Math.max(1.05, createNaturalFlightCrash(random)));
     const start = nameStarts[Math.floor(random() * nameStarts.length)];
     const suffix = random() < 0.3 ? String(10 + Math.floor(random() * 90)) : String.fromCharCode(97 + Math.floor(random() * 26));
     const name = start.length > 2 ? `${start}_${suffix}` : `${start}***${suffix}`;
-    return { id: `bot-${i}-${name}-${Math.floor(random() * 9999)}`, name, bet: amounts[Math.floor(random() * amounts.length)], target, cashout: null, win: null, hue: Math.floor(random() * 360), state: "active" as const };
+    return { id: `bot-${i}-${name}-${Math.floor(random() * 9999)}`, name, bet: amounts[Math.floor(random() * amounts.length)], target, cashout: null, win: null, hue: Math.floor(random() * 360), state: initialState };
   });
 }
 
@@ -81,18 +78,17 @@ const FlightCanvas = memo(function FlightCanvas({ phase, multiplier, countdown, 
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
     if (!canvas || !context) return;
-    let frame = 0, width = 0, height = 0, last = performance.now();
+    let frame = 0, width = 0, height = 0;
     const resize = () => { const box = canvas.getBoundingClientRect(); const ratio = Math.min(window.devicePixelRatio || 1, 2); width = Math.max(1, box.width); height = Math.max(1, box.height); canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio); context.setTransform(ratio, 0, 0, ratio, 0, 0); };
     const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
 
     const point = (t: number) => ({ x: width * (.035 + .82 * ((1 - Math.exp(-2.65 * t)) / (1 - Math.exp(-2.65)))), y: height * (.94 - .80 * Math.pow(t, 1.78)) });
 
     const draw = (now: number) => {
-      const dt = Math.min(48, Math.max(16, now - last || 16)); last = now;
       const currentPhase = phaseValue.current;
 
-      let isFlying = currentPhase === "ANIMATING" || currentPhase === "FLYING";
-      let isCrashed = currentPhase === "RESULT" || currentPhase === "CRASHED";
+      const isFlying = currentPhase === "ANIMATING" || currentPhase === "FLYING";
+      const isCrashed = currentPhase === "RESULT" || currentPhase === "CRASHED";
       let target = 1;
 
       const rawMult = Number(multiplierValue.current);
@@ -114,7 +110,7 @@ const FlightCanvas = memo(function FlightCanvas({ phase, multiplier, countdown, 
       if (isCrashed) {
         displayValue.current = safeCrash;
       } else if (isFlying) {
-        displayValue.current += (target - displayValue.current) * Math.min(1, dt / 45);
+        displayValue.current = target;
       } else {
         displayValue.current = 1;
       }
@@ -218,7 +214,7 @@ const FlightCanvas = memo(function FlightCanvas({ phase, multiplier, countdown, 
     <div ref={planeRef} className="aviator-plane"><PlaneMark /></div>
     <div className="aviator-stage-message" aria-live="polite">
       {isCountdown ? (
-        <><small>NEXT ROUND IN</small><b>{Math.max(0.1, countdown).toFixed(1)}s</b></>
+        <><small>NEXT ROUND IN</small><b>{Math.max(1, Math.ceil(countdown))}</b></>
       ) : isCrashed ? (
         <><small>FLEW AWAY!</small><strong>{crashMultiplier.toFixed(2)}x</strong></>
       ) : isFlying ? (
@@ -231,14 +227,14 @@ const FlightCanvas = memo(function FlightCanvas({ phase, multiplier, countdown, 
   </section>;
 });
 
-function BetPanel({ bay, chips, maxStake, phase, busy, multiplier, result, pending, onChange, onLaunch, onCashout }: { bay: FlightBetBay; chips: readonly number[]; maxStake: number; phase: "COUNTDOWN" | "FLYING" | "CRASHED" | FlightPhase; busy: boolean; multiplier: number; result?: FlightBetResult; pending: boolean; onChange: (bay: FlightBetBay) => void; onLaunch: () => void; onCashout: () => void; }) {
+function BetPanel({ bay, chips, maxStake, phase, busy, multiplier, result, onChange, onLaunch, onCashout }: { bay: FlightBetBay; chips: readonly number[]; maxStake: number; phase: "COUNTDOWN" | "FLYING" | "CRASHED" | FlightPhase; busy: boolean; multiplier: number; result?: FlightBetResult; onChange: (bay: FlightBetBay) => void; onLaunch: () => void; onCashout: () => void; }) {
   const placed = result?.state === "placed", active = result?.state === "active", settled = result?.state === "cashed_out", lost = result?.state === "lost";
   const options = chips.filter((chip) => chip <= maxStake);
   const nudge = (direction: -1 | 1) => { const current = Math.max(0, options.indexOf(bay.amount)); onChange({ ...bay, amount: options[Math.max(0, Math.min(options.length - 1, current + direction))] ?? bay.amount }); };
   const quick = [100, 250, 500, 1000].map((value) => options.find((chip) => chip >= value) ?? value);
   const canAddDuringCountdown = (phase === "CLOSED" || phase === "COUNTDOWN" || phase === "BETTING") && !placed;
   const controlsLocked = (phase !== "BETTING" && phase !== "CLOSED" && phase !== "COUNTDOWN") || (busy && !canAddDuringCountdown);
-  const actionDisabled = pending || settled || lost || phase === "RESULT" || phase === "CRASHED" || (phase === "ANIMATING" && !active && !placed) || ((phase === "CLOSED" || phase === "COUNTDOWN") && placed);
+  const actionDisabled = settled || lost || phase === "RESULT" || phase === "CRASHED" || (phase === "ANIMATING" && !active && !placed) || ((phase === "CLOSED" || phase === "COUNTDOWN") && placed);
   const shownPayout = settled ? result.payout : active ? bay.amount * multiplier : bay.amount;
 
   return <section className={`aviator-bet-panel ${result ? "is-mine" : ""}`}>
@@ -258,68 +254,69 @@ function BetPanel({ bay, chips, maxStake, phase, busy, multiplier, result, pendi
         </div>
       </div>
       <button className={`aviator-action ${active ? "cashout" : placed || settled ? "accepted" : ""} ${settled ? "cashed-success" : ""}`} disabled={actionDisabled} onClick={active ? onCashout : onLaunch}>
-        <span>{pending ? "CASHING OUT…" : settled ? `CASHED OUT ${result.cashOutMultiplier?.toFixed(2)}x` : lost ? "LOST" : active ? "Cash Out" : placed ? "BET PLACED" : phase === "RESULT" || phase === "CRASHED" ? "Wait" : "Bet"}</span>
+        <span>{settled ? `CASHED OUT ${result.cashOutMultiplier?.toFixed(2)}x` : lost ? "LOST" : active ? "Cash Out" : placed ? "BET PLACED" : phase === "RESULT" || phase === "CRASHED" ? "Wait" : "Bet"}</span>
         <b>{settled ? "+" : ""}{money(shownPayout)} <small>PKR</small></b>
       </button>
     </div>
   </section>;
 }
 
-export function FlightXTable({ sessionId, balance, history, phase, countdown, round, active, multiplier, bays, roundKey, chips, maxStake, busy, cashoutPendingBays, betResults, muted, onToggleMuted, onHistory, onBaysChange, onLaunch, onCashout }: FlightXTableProps) {
+export function FlightXTable({ balance, history, phase, countdown, round, active, multiplier, committedCrash, roundKey, bays, chips, maxStake, busy, betResults, muted, onToggleMuted, onHistory, onBaysChange, onLaunch, onCashout }: FlightXTableProps) {
   // Continuous Demo Round State Engine (when user has no active server round)
   const [demoPhase, setDemoPhase] = useState<"COUNTDOWN" | "FLYING" | "CRASHED">("FLYING");
+  const demoPhaseRef = useRef<"COUNTDOWN" | "FLYING" | "CRASHED">("FLYING");
   const [demoMultiplier, setDemoMultiplier] = useState(1.0);
-  const [demoCountdown, setDemoCountdown] = useState(4.0);
-  const [demoCrashTarget, setDemoCrashTarget] = useState(2.45);
-  const [demoLobby, setDemoLobby] = useState<LobbyPilot[]>(() => createLobby("demo-start"));
-  const [demoUserBets, setDemoUserBets] = useState<[FlightBetResult | null, FlightBetResult | null]>([null, null]);
+  const [demoCountdown, setDemoCountdown] = useState(5);
+  const [demoCrashTarget, setDemoCrashTarget] = useState(() => Math.min(100, createNaturalFlightCrash()));
+  const [demoLobby, setDemoLobby] = useState<LobbyPilot[]>(() => createLobby("demo-start", "active"));
   const [toasts, setToasts] = useState<CashoutToast[]>([]);
+  const [recentFlights, setRecentFlights] = useState<FlightHistoryEntry[]>(() => history.flatMap((item) => {
+    const crash = flightCrashFromHistory(item);
+    return crash == null ? [] : [{ roundId: item.roundId, multiplier: crash, completedAt: item.createdAt }];
+  }).slice(0, 8));
 
   const [tab, setTab] = useState<"all" | "previous" | "top">("all");
   const liveMultiplier = useRef(multiplier);
-  const crashMultiplier = visibleFlightCrashMultiplier(round?.payload ?? {}, round?.multiplier ?? multiplier ?? 1);
+  const crashMultiplier = committedCrash ?? committedCrashMultiplier(round?.payload ?? {}, round?.multiplier ?? 1);
 
   useEffect(() => { liveMultiplier.current = multiplier; }, [multiplier]);
 
   // Continuous Background Demo Flight Loop
   useEffect(() => {
-    if (active || phase === "ANIMATING" || phase === "RESULT") return;
+    if (active || phase === "CLOSED" || phase === "ANIMATING" || phase === "RESULT") return;
 
     let timer: number;
+    let restartTimer: number | undefined;
     let lastTime = performance.now();
     let currentMult = 1.0;
 
     const startNewDemoRound = () => {
-      const rand = Math.random();
-      const crash = rand < 0.40 ? Math.round((1.15 + Math.random() * 0.7) * 100) / 100
-        : rand < 0.75 ? Math.round((1.85 + Math.random() * 1.5) * 100) / 100
-        : rand < 0.92 ? Math.round((3.35 + Math.random() * 4.5) * 100) / 100
-        : Math.round((8.0 + Math.random() * 15.0) * 100) / 100;
+      const crash = Math.min(100, createNaturalFlightCrash());
 
       setDemoCrashTarget(crash);
       setDemoMultiplier(1.0);
       currentMult = 1.0;
       setDemoLobby(createLobby(`demo-${Date.now()}`));
-      setDemoUserBets([null, null]);
-      setDemoCountdown(4.0);
+      countdownTime = 5;
+      setDemoCountdown(5);
+      demoPhaseRef.current = "COUNTDOWN";
       setDemoPhase("COUNTDOWN");
     };
 
-    let countdownTime = 4.0;
+    let countdownTime = 5;
     const tick = () => {
       const now = performance.now();
       const dt = Math.min(60, (now - lastTime)) / 1000;
       lastTime = now;
 
-      setDemoPhase((prevPhase) => {
+      const advance = (prevPhase: "COUNTDOWN" | "FLYING" | "CRASHED"): "COUNTDOWN" | "FLYING" | "CRASHED" => {
         if (prevPhase === "COUNTDOWN") {
           countdownTime -= dt;
           setDemoCountdown(Math.max(0, countdownTime));
           if (countdownTime <= 0) {
             currentMult = 1.0;
             setDemoMultiplier(1.0);
-            // Transition placed demo bets to active
-            setDemoUserBets((bets) => bets.map((b) => b && b.state === "placed" ? { ...b, state: "active" as const } : b) as [FlightBetResult | null, FlightBetResult | null]);
+            setDemoLobby((rows) => rows.map((row) => row.state === "placed" ? { ...row, state: "active" } : row));
             return "FLYING";
           }
           return "COUNTDOWN";
@@ -329,13 +326,18 @@ export function FlightXTable({ sessionId, balance, history, phase, countdown, ro
           // Exponential flight speed: climbs smoothly
           const growthRate = 0.12 + Math.pow(currentMult, 0.6) * 0.18;
           currentMult += growthRate * dt;
-          setDemoMultiplier(currentMult);
+          setDemoMultiplier(Math.min(currentMult, demoCrashTarget));
 
           if (currentMult >= demoCrashTarget) {
             // Demo Crash trigger!
             setDemoLobby((rows) => rows.map((row) => row.state === "active" ? { ...row, state: "lost" } : row));
-            setDemoUserBets((bets) => bets.map((b) => b && b.state === "active" ? { ...b, state: "lost" as const } : b) as [FlightBetResult | null, FlightBetResult | null]);
-            window.setTimeout(() => startNewDemoRound(), 2200);
+            const completedAt = new Date().toISOString();
+            setRecentFlights((historyItems) => mergeFlightHistory(historyItems, [{
+              roundId: `demo-${completedAt}-${demoCrashTarget}`,
+              multiplier: demoCrashTarget,
+              completedAt,
+            }]));
+            restartTimer = window.setTimeout(() => startNewDemoRound(), 2200);
             return "CRASHED";
           }
 
@@ -359,23 +361,68 @@ export function FlightXTable({ sessionId, balance, history, phase, countdown, ro
         }
 
         return prevPhase;
-      });
+      };
+      const nextPhase = advance(demoPhaseRef.current);
+      if (nextPhase !== demoPhaseRef.current) {
+        demoPhaseRef.current = nextPhase;
+        setDemoPhase(nextPhase);
+      }
 
       timer = window.requestAnimationFrame(tick);
     };
 
     timer = window.requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(timer);
+    return () => {
+      cancelAnimationFrame(timer);
+      if (restartTimer !== undefined) window.clearTimeout(restartTimer);
+    };
   }, [active, phase, demoCrashTarget]);
+
+  useEffect(() => {
+    const serverHistory = history.flatMap((item) => {
+      const crash = flightCrashFromHistory(item);
+      return crash == null ? [] : [{ roundId: item.roundId, multiplier: crash, completedAt: item.createdAt }];
+    });
+    const timer = window.setTimeout(() => setRecentFlights((current) => mergeFlightHistory(current, serverHistory)), 0);
+    return () => window.clearTimeout(timer);
+  }, [history]);
+
+  useEffect(() => {
+    if (phase !== "CLOSED" || round) return;
+    const timer = window.setTimeout(() => {
+      setDemoLobby(createLobby(`launch-${Date.now()}`));
+      setDemoMultiplier(1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [phase, round]);
+
+  useEffect(() => {
+    if (phase !== "RESULT" || !round) return;
+    const completedAt = round.completedAt || new Date().toISOString();
+    const timer = window.setTimeout(() => {
+      setRecentFlights((current) => mergeFlightHistory(current, [{
+        roundId: round.roundId,
+        multiplier: crashMultiplier,
+        completedAt,
+      }]));
+      // Prepare the spectator table behind the crash/result and restart
+      // countdown. It becomes visible at 1.00x only after that countdown ends.
+      setDemoCrashTarget(Math.min(100, createNaturalFlightCrash()));
+      setDemoMultiplier(1);
+      setDemoLobby(createLobby(`post-round-${round.roundId}`, "active"));
+      demoPhaseRef.current = "FLYING";
+      setDemoPhase("FLYING");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [crashMultiplier, phase, round]);
 
   // Synchronize simulated players when REAL server round is active
   useEffect(() => {
     if (!active && phase !== "ANIMATING") return;
 
-    if (phase === "RESULT") {
-      setDemoLobby((rows) => rows.map((row) => row.state === "active" ? { ...row, state: "lost" } : row));
-      return;
-    }
+    const activationTimer = window.setTimeout(() => {
+      setDemoLobby((rows) => rows.map((row) => row.state === "placed" ? { ...row, state: "active" } : row));
+    }, 0);
 
     const timer = window.setInterval(() => {
       const now = Math.max(1, liveMultiplier.current || 1);
@@ -395,13 +442,21 @@ export function FlightXTable({ sessionId, balance, history, phase, countdown, ro
       });
     }, 100);
 
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearTimeout(activationTimer);
+      window.clearInterval(timer);
+    };
   }, [active, phase]);
 
-  const recent = useMemo(() => {
-    const values = history.slice(0, 8).map((item) => Number(item.label.match(/[\d.]+/)?.[0] ?? item.multiplier));
-    return values.length ? values : [1.06, 4.23, 1.35, 1.12, 2.70, 1.67, 4.30, 1.00];
-  }, [history]);
+  // Include the just-crashed round in the same render as the FLEW AWAY copy.
+  // The effect above retains it locally, while mergeFlightHistory keeps the
+  // eventual server-history refresh idempotent by round ID.
+  const completedFlight = phase === "RESULT" && round ? [{
+    roundId: round.roundId,
+    multiplier: crashMultiplier,
+    completedAt: round.completedAt || new Date().toISOString(),
+  }] : active && multiplier >= crashMultiplier ? [{ roundId: roundKey, multiplier: crashMultiplier, completedAt: new Date().toISOString() }] : [];
+  const recent = mergeFlightHistory(recentFlights, completedFlight).map((entry) => entry.multiplier);
 
   const updateBay = (index: number, value: FlightBetBay) => {
     const next: [FlightBetBay, FlightBetBay] = [{ ...bays[0] }, { ...bays[1] }];
@@ -409,39 +464,12 @@ export function FlightXTable({ sessionId, balance, history, phase, countdown, ro
     onBaysChange(next);
   };
 
-  const handleDemoLaunch = (index: number) => {
-    const id = index === 0 ? "FLIGHT_1" : "FLIGHT_2";
-    const amount = bays[index].amount;
-    const state = demoPhase === "FLYING" ? "active" : "placed";
-    setDemoUserBets((prev) => {
-      const next = [...prev] as [FlightBetResult | null, FlightBetResult | null];
-      next[index] = { id, amount, state, cashOutMultiplier: null, payout: 0 };
-      return next;
-    });
-  };
-
-  const handleDemoCashout = (index: number) => {
-    const current = demoUserBets[index];
-    if (!current || current.state !== "active") return;
-    const lockedMultiplier = demoMultiplier;
-    const payout = Math.round(current.amount * lockedMultiplier * 100) / 100;
-    SoundManager.play("cashout");
-    setDemoUserBets((prev) => {
-      const next = [...prev] as [FlightBetResult | null, FlightBetResult | null];
-      next[index] = { ...current, state: "cashed_out", cashOutMultiplier: lockedMultiplier, payout };
-      return next;
-    });
-    const toastId = `toast-you-${Date.now()}`;
-    setToasts((prev) => [...prev.slice(-2), { id: toastId, name: "YOU", multiplier: lockedMultiplier, win: payout }]);
-    window.setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== toastId)), 2500);
-  };
-
   const shownLobby = tab === "top" ? [...demoLobby].sort((a, b) => (b.win ?? 0) - (a.win ?? 0)) : demoLobby;
 
-  const currentEffectivePhase = active ? phase : (phase === "RESULT" ? "RESULT" : demoPhase);
+  const currentEffectivePhase = active && multiplier >= crashMultiplier ? "CRASHED" : phase === "CLOSED" ? "COUNTDOWN" : active ? phase : (phase === "RESULT" ? "RESULT" : demoPhase);
   const currentEffectiveMultiplier = active ? multiplier : (phase === "RESULT" ? crashMultiplier : demoMultiplier);
-  const currentEffectiveCrashMultiplier = active ? crashMultiplier : demoCrashTarget;
-  const currentEffectiveCountdown = active ? countdown : demoCountdown;
+  const currentEffectiveCrashMultiplier = effectiveFlightCrashMultiplier(phase, active, crashMultiplier, demoCrashTarget);
+  const currentEffectiveCountdown = phase === "CLOSED" ? countdown : active ? countdown : demoCountdown;
 
   return <main className="flight-x-table aviator-game">
     <header className="aviator-header">
@@ -484,9 +512,7 @@ export function FlightXTable({ sessionId, balance, history, phase, countdown, ro
         <div className="aviator-bets">
           {[0, 1].map((index) => {
             const id = index === 0 ? "FLIGHT_1" : "FLIGHT_2";
-            const betResult = active || phase === "ANIMATING"
-              ? betResults.find((bet) => bet.id === id)
-              : (demoUserBets[index] ?? undefined);
+            const betResult = betResults.find((bet) => bet.id === id);
 
             return <BetPanel
               key={index}
@@ -497,16 +523,9 @@ export function FlightXTable({ sessionId, balance, history, phase, countdown, ro
               busy={busy}
               multiplier={currentEffectiveMultiplier}
               result={betResult}
-              pending={cashoutPendingBays[index]}
               onChange={(value) => updateBay(index, value)}
-              onLaunch={() => {
-                if (active || phase === "ANIMATING") onLaunch(index);
-                else { handleDemoLaunch(index); onLaunch(index); }
-              }}
-              onCashout={() => {
-                if (active || phase === "ANIMATING") onCashout(index);
-                else handleDemoCashout(index);
-              }}
+              onLaunch={() => onLaunch(index)}
+              onCashout={() => onCashout(index)}
             />;
           })}
         </div>
@@ -533,7 +552,7 @@ export function FlightXTable({ sessionId, balance, history, phase, countdown, ro
               <div key={pilot.id} className={pilot.state === "cashed_out" ? "won" : pilot.state === "lost" ? "lost" : ""}>
                 <span><i style={{ "--h": pilot.hue } as React.CSSProperties}>{pilot.name.at(0)}</i>{pilot.name}</span>
                 <b>{money(pilot.bet)}</b>
-                <em>{pilot.cashout ? `${pilot.cashout.toFixed(2)}x` : pilot.state === "active" ? "Playing…" : "—"}</em>
+                <em>{pilot.cashout ? `${pilot.cashout.toFixed(2)}x` : pilot.state === "active" ? "Playing…" : pilot.state === "placed" ? "Bet placed" : "—"}</em>
                 <strong>{pilot.win ? money(pilot.win) : pilot.state === "lost" ? "Lost" : "—"}</strong>
               </div>
             ))}

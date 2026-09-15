@@ -51,6 +51,28 @@ describe("8 Ball Cash Arena physics", () => {
     expect(Math.abs(balls[0].vz)).toBeLessThan(.3);
   });
 
+  it("reflects fast balls from cushions without tunnelling or losing finite state", () => {
+    const fast = ball(4, 1.16, .5);
+    fast.vx = 5;
+    const events = stepPoolPhysics([fast], .018);
+    expect(events.railHits).toEqual([4]);
+    expect(fast.vx).toBeLessThan(0);
+    expect(fast.x).toBeLessThanOrEqual(1.17);
+    expect([fast.x, fast.z, fast.vx, fast.vz].every(Number.isFinite)).toBe(true);
+  });
+
+  it("keeps simultaneous collisions stable until every ball stops", () => {
+    const balls = [ball(0, 0, -.4), ball(1, 0, 0), ball(2, -.105, .19), ball(3, .105, .19), ball(4, 0, .38)];
+    strikeCueBall(balls, 0, 1, { x: .7, y: .4 });
+    let collisionCount = 0;
+    for (let step = 0; step < 7200 && balls.some(item => item.vx * item.vx + item.vz * item.vz > .0004); step++) {
+      collisionCount += stepPoolPhysics(balls, 1 / 240).collisions.length;
+    }
+    expect(collisionCount).toBeGreaterThan(2);
+    expect(balls.every(item => item.pocketed || item.vx * item.vx + item.vz * item.vz <= .0004)).toBe(true);
+    expect(balls.every(item => [item.x, item.z, item.rotationX, item.rotationZ].every(Number.isFinite))).toBe(true);
+  });
+
   it("curves the cue-ball path when side spin is applied", () => {
     const straight = [ball(0, 0, 0)];
     const english = [ball(0, 0, 0)];

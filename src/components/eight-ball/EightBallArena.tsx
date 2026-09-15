@@ -35,13 +35,34 @@ export function EightBallArena(props: Props) {
   const host = useRef<HTMLCanvasElement>(null), live=useRef(props);
   useEffect(()=>{live.current=props;},[props]);
   useEffect(()=>{
-    const canvas=host.current!;const c=canvas.getContext("2d",{alpha:false})!;
+    const canvas=host.current!;const c=canvas.getContext("2d",{alpha:false,desynchronized:true})!;
     const backing=document.createElement("canvas"), bg=backing.getContext("2d")!;
     let w=0,h=0,dpr=1,s=1,cx=0,cy=0,raf=0,drag=false,placing:{x:number;z:number}|null=null;
-    let soundId="",soundIndex=0;const rack=createRack();
+    let soundId="",soundIndex=0,localAngle=0,lastAimSent=0,renderedMatchId:string|null|undefined=undefined;
+    let aimVersion=-1,aimAngle=Infinity,aimPrediction:ReturnType<typeof predictAim>|null=null;
+    let ballSprites:HTMLCanvasElement[][]=[];
+    const rack=createRack();
     const map=(x:number,z:number)=>({x:cx+z*s,y:cy+x*s});
+    function rebuildBallSprites(){
+      const radius=BALL_RADIUS*s,size=Math.max(8,Math.ceil(radius*3));
+      ballSprites=Array.from({length:16},(_,number)=>{
+        const phases=number>=9?12:1;
+        return Array.from({length:phases},(_,phase)=>{
+          const sprite=document.createElement("canvas");sprite.width=Math.ceil(size*dpr);sprite.height=Math.ceil(size*dpr);
+          const sc=sprite.getContext("2d")!;sc.setTransform(dpr,0,0,dpr,0,0);
+          sphere(sc,size/2,size/2,radius,number,phase/phases*Math.PI*2/.24);
+          return sprite;
+        });
+      });
+    }
+    function drawBall(number:number,x:number,z:number,rotation:number){
+      const variants=ballSprites[number];if(!variants)return;
+      const normalized=((rotation*.24)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+      const sprite=variants[Math.floor(normalized/(Math.PI*2)*variants.length)%variants.length];
+      const px=cx+z*s,py=cy+x*s,size=sprite.width/dpr;c.drawImage(sprite,px-size/2,py-size/2,size,size);
+    }
     function resize(){
-      const rect=canvas.getBoundingClientRect();w=rect.width;h=rect.height;dpr=Math.min(3,window.devicePixelRatio||1);
+      const rect=canvas.getBoundingClientRect();w=rect.width;h=rect.height;dpr=Math.min(2,window.devicePixelRatio||1);
       canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);backing.width=canvas.width;backing.height=canvas.height;
       c.setTransform(dpr,0,0,dpr,0,0);bg.setTransform(dpr,0,0,dpr,0,0);
       s=Math.max(1,Math.min((w-(w<700?76:150))/5.32,(h-34)/2.99));cx=w/2;cy=h/2;
@@ -71,37 +92,47 @@ export function EightBallArena(props: Props) {
       for(const [xx,zz] of pockets){const p=map(xx,zz),r=s*(zz===0?.112:.143);const rim=bg.createRadialGradient(p.x,p.y,r*.2,p.x,p.y,r*1.2);rim.addColorStop(0,"#000205");rim.addColorStop(.7,"#010307");rim.addColorStop(.86,"#361e25");rim.addColorStop(1,"#a7a2a5");bg.fillStyle=rim;bg.beginPath();bg.arc(p.x,p.y,r*1.15,0,Math.PI*2);bg.fill();bg.strokeStyle="#f5dde136";bg.lineWidth=.6;bg.stroke();}
       for(const side of [-1,1])for(const z of [-1.76,-1.17,-.59,.59,1.17,1.76]){const p=map(side*1.35,z);bg.save();bg.translate(p.x,p.y);bg.rotate(Math.PI/4);bg.fillStyle="#cdd8da";bg.fillRect(-s*.009,-s*.009,s*.018,s*.018);bg.restore();}
       bg.font=`600 ${Math.max(6,s*.055)}px Arial`;bg.textAlign="center";bg.fillStyle="#d6ae7e";bg.fillText("A U R U M   •   T O U R N A M E N T",cx,cy+1.408*s);
+      rebuildBallSprites();
     }
     const observer=new ResizeObserver(resize);observer.observe(canvas);resize();
     function draw(){
       const p=live.current,now=Date.now()+p.clockOffset,state=p.state,trace=state?.trace;
+      if(state?.id!==renderedMatchId){renderedMatchId=state?.id;localAngle=p.angle;lastAimSent=p.angle;}
       if (!backing.width || !backing.height || !w || !h) { raf=requestAnimationFrame(draw); return; }
       c.drawImage(backing,0,0,w,h);
-      let balls:PoolBallState[]=state?.balls??rack;
-      if(trace && now<trace.at+trace.duration){
+      const balls:PoolBallState[]=state?.balls??rack;
+      const tracing=!!trace&&now<trace.at+trace.duration;
+      let traceA:number[][]|null=null,traceB:number[][]|null=null,traceT=0;
+      if(tracing){
         const at=clamp((now-trace.at)/1000*30,0,trace.frames.length-1),idx=Math.floor(at),a=trace.frames[idx],b=trace.frames[Math.min(idx+1,trace.frames.length-1)],t=at-idx;
-        balls=a.map((v,i)=>({id:v[0],number:v[0],x:v[1]+(b[i][1]-v[1])*t,z:v[2]+(b[i][2]-v[2])*t,pocketed:Boolean(v[3]),vx:0,vz:0,rotationX:v[4],rotationZ:v[5],sideSpin:0,topSpin:0}));
+        traceA=a;traceB=b;traceT=t;
       }
       if(trace){
         if(soundId!==trace.id){soundId=trace.id;soundIndex=0;while(soundIndex<trace.sounds.length&&trace.sounds[soundIndex].at<now-trace.at-400)soundIndex++;}
         while(soundIndex<trace.sounds.length&&trace.sounds[soundIndex].at<=now-trace.at){const sound=trace.sounds[soundIndex++];p.onSound(sound.kind,sound.force);}
       }
-      let cue=balls.find(b=>b.number===0&&!b.pocketed);
-      if(placing && state?.ballInHand){balls=balls.filter(b=>b.number!==0);cue={...rack[0],...placing};balls=[cue,...balls];}
+      const storedCue=balls.find(b=>b.number===0&&!b.pocketed);
+      const cue=storedCue;
       const ready=!state||now>=state.readyAt;
       if(cue && ((p.interactive&&!state?.ballInHand&&ready)||p.preview)){
-        const angle=p.preview?0:p.angle,pred=predictAim(balls,angle),start=map(cue.x,cue.z),end=map(pred.endX,pred.endZ);
+        const angle=p.preview?0:localAngle,version=state?.version??-1;
+        if(!aimPrediction||aimVersion!==version||aimAngle!==angle){aimPrediction=predictAim(balls,angle);aimVersion=version;aimAngle=angle;}
+        const pred=aimPrediction,start=map(cue.x,cue.z),end=map(pred.endX,pred.endZ);
         c.strokeStyle="#10232a90";c.lineWidth=2.8;c.beginPath();c.moveTo(start.x,start.y);c.lineTo(end.x,end.y);c.stroke();
         c.strokeStyle="#f4ffffdc";c.lineWidth=.85;c.stroke();c.beginPath();c.arc(end.x,end.y,BALL_RADIUS*s,0,Math.PI*2);c.fillStyle="#ffffff12";c.fill();c.lineWidth=.8;c.stroke();
         if(pred.objectEndX!==null&&pred.objectEndZ!==null){const dest=map(pred.objectEndX,pred.objectEndZ);c.beginPath();c.moveTo(end.x,end.y);c.lineTo(dest.x,dest.y);c.strokeStyle="#f8ebbdaf";c.stroke();}
         cueArt(c,start.x,start.y,angle,s,s*(.1+(p.preview?0:p.power)*.32));
       }
       if(trace&&now>=trace.at-250&&now<trace.at){const v=trace.frames[0].find(b=>b[0]===0)!;const pt=map(v[1],v[2]);cueArt(c,pt.x,pt.y,trace.input.angle,s,s*(.1+trace.input.power*.32)*(1-clamp((now-trace.at+110)/110,0,1)));}
-      for(const ball of balls){if(ball.pocketed)continue;const pt=map(ball.x,ball.z);sphere(c,pt.x,pt.y,BALL_RADIUS*s,ball.number,ball.rotationX+ball.rotationZ);}
+      // Interpolate the compact network trace directly into canvas draws.
+      // This avoids allocating 16 objects (and collecting them) every frame.
+      if(traceA&&traceB)for(let i=0;i<traceA.length;i++){const v=traceA[i],next=traceB[i];if(v[3])continue;drawBall(v[0],v[1]+(next[1]-v[1])*traceT,v[2]+(next[2]-v[2])*traceT,v[4]+v[5]+(next[4]+next[5]-v[4]-v[5])*traceT);}
+      if(!tracing)for(const ball of balls){if(ball.pocketed||(placing&&state?.ballInHand&&ball.number===0))continue;drawBall(ball.number,ball.x,ball.z,ball.rotationX+ball.rotationZ);}
+      if(!tracing&&placing&&state?.ballInHand)drawBall(0,placing.x,placing.z,0);
       if(state?.ballInHand&&p.interactive){const pos=placing??cue??{x:0,z:-1.48};const pt=map(pos.x,pos.z);c.strokeStyle=validCuePlacement(pos.x,pos.z,balls)?"#d2fff6":"#ff806c";c.lineWidth=1.2;c.beginPath();c.arc(pt.x,pt.y,BALL_RADIUS*s+4+Math.sin(now/250),0,Math.PI*2);c.stroke();}
       raf=requestAnimationFrame(draw);
     }
-    function aim(e:PointerEvent){const p=live.current;if(!p.interactive)return;const rect=canvas.getBoundingClientRect(),x=(e.clientY-rect.top-cy)/s,z=(e.clientX-rect.left-cx)/s;if(p.state?.ballInHand){if(drag)placing={x,z};return;}const cue=p.state?.balls.find(b=>b.number===0)??rack[0];if(e.pointerType==="mouse"||drag)p.onAim(Math.atan2(x-cue.x,z-cue.z));}
+    function aim(e:PointerEvent){const p=live.current;if(!p.interactive)return;const rect=canvas.getBoundingClientRect(),x=(e.clientY-rect.top-cy)/s,z=(e.clientX-rect.left-cx)/s;if(p.state?.ballInHand){if(drag)placing={x,z};return;}const cue=p.state?.balls.find(b=>b.number===0)??rack[0];if(e.pointerType==="mouse"||drag){localAngle=Math.atan2(x-cue.x,z-cue.z);if(Math.abs(localAngle-lastAimSent)>.0005){lastAimSent=localAngle;p.onAim(localAngle);}}}
     function down(e:PointerEvent){drag=true;canvas.setPointerCapture(e.pointerId);aim(e);}
     function up(){if(drag&&placing){live.current.onPlace(placing.x,placing.z);placing=null;}drag=false;}
     canvas.addEventListener("pointerdown",down);canvas.addEventListener("pointermove",aim);canvas.addEventListener("pointerup",up);canvas.addEventListener("pointercancel",up);raf=requestAnimationFrame(draw);

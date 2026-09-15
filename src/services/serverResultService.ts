@@ -3,7 +3,7 @@ import type { ClientSession } from "mongoose";
 import { ApiError } from "@/lib/api";
 import { connectDB } from "@/lib/db";
 import { premiumGame, premiumGameDefinitions, type PremiumGameId } from "@/lib/premium-games/definitions";
-import { createFlightCrash, createPremiumOutcome, flightElapsedFor, flightMultiplierAt, type PremiumRoundOutcome, type RoundSelection } from "@/lib/premium-games/engine";
+import { createFlightCrash, createPremiumOutcome, flightCashoutPayout, flightMultiplierAt, hasFlightCrashed, type PremiumRoundOutcome, type RoundSelection } from "@/lib/premium-games/engine";
 import { createRoundSeed, PREMIUM_RNG_VERSION } from "@/lib/premium-games/rngService";
 import {
   BetSelection,
@@ -124,6 +124,7 @@ function serializeCompletedRound(row: Record<string, unknown>) {
     net: Number(row.net),
     balance: Number(row.balanceAfter),
     multiplier: Number(outcome.multiplier ?? (Number(row.totalStake) ? Number(row.payout) / Number(row.totalStake) : 0)),
+    selections: Array.isArray(row.selections) ? row.selections : [],
     winningOptions: Array.isArray(outcome.winningOptions) ? outcome.winningOptions : [],
     payload: outcome.payload ?? {},
     commitment: row.rngCommitment,
@@ -136,6 +137,7 @@ function serializeCompletedRound(row: Record<string, unknown>) {
 
 function serializeActiveFlight(row: Record<string, unknown>) {
   return {
+    crashMultiplier: Number(row.crashMultiplier),
     roundId: String(row.roundId),
     requestId: String(row.requestId),
     gameId: "flight-x",
@@ -154,11 +156,14 @@ export async function getPremiumGameState(userId: string, gameId: PremiumGameId)
   // database wave instead of waiting for setting/session work before wallet and
   // history. This is one of the hottest paths after a game card is clicked.
   if (gameId !== "flight-x") {
-    const [setting, session, wallet, history] = await Promise.all([
+    const [setting, session, wallet, history, latestRound] = await Promise.all([
       assertGameAvailable(gameId),
       touchGameSession(userId, gameId),
       Wallet.findOne({ userId }).select("balance").lean(),
       GameHistory.find({ userId, gameId }).select("roundId result label stake payout multiplier createdAt").sort({ createdAt: -1 }).limit(16).lean(),
+      gameId === "red-vs-black"
+        ? GameRound.findOne({ userId, gameId, status: "COMPLETED" }).select("+rngSeed").sort({ completedAt: -1 }).lean()
+        : Promise.resolve(null),
     ]);
     if (!session) throw new ApiError("The game session could not be opened.", 500, "SESSION_CREATE_FAILED");
     if (!wallet) throw new ApiError("Wallet not found.", 404, "WALLET_NOT_FOUND");
@@ -169,7 +174,7 @@ export async function getPremiumGameState(userId: string, gameId: PremiumGameId)
       setting,
       history: history.map((row) => serializeHistory(row as unknown as Record<string, unknown>)),
       activeRound: null,
-      latestRound: null,
+      latestRound: latestRound ? serializeCompletedRound(latestRound as unknown as Record<string, unknown>) : null,
       rngVersion: PREMIUM_RNG_VERSION,
     };
   }
@@ -188,7 +193,7 @@ export async function getPremiumGameState(userId: string, gameId: PremiumGameId)
   const [wallet, history, active, latestRound] = await Promise.all([
     Wallet.findOne({ userId }).select("balance").lean(),
     GameHistory.find({ userId, gameId }).select("roundId result label stake payout multiplier createdAt").sort({ createdAt: -1 }).limit(16).lean(),
-    GameRound.findOne({ userId, gameId, status: "PLAYING" }).sort({ createdAt: -1 }).lean(),
+    GameRound.findOne({ userId, gameId, status: "PLAYING" }).select("+crashMultiplier").sort({ createdAt: -1 }).lean(),
     GameRound.findOne({ userId, gameId, status: "COMPLETED" }).select("+rngSeed").sort({ completedAt: -1 }).lean(),
   ]);
   if (!wallet) throw new ApiError("Wallet not found.", 404, "WALLET_NOT_FOUND");
@@ -331,10 +336,9 @@ export async function startFlightRound(input: { userId: string; requestId: strin
   if (!gameSession) throw new ApiError("The flight session could not be opened.", 500, "SESSION_CREATE_FAILED");
   const totalStake = sumStake(input.selections);
   const rng = createRoundSeed(gameId);
-  const previousRound = await GameRound.findOne({ userId: input.userId, gameId, status: "COMPLETED" }).select("+crashMultiplier").sort({ completedAt: -1 }).lean();
-  const previousCrash = Number(previousRound?.crashMultiplier ?? 0);
-  let crashMultiplier = createFlightCrash(rng.seed);
-  for (let attempt = 1; crashMultiplier === previousCrash && attempt <= 8; attempt += 1) crashMultiplier = createFlightCrash(`${rng.seed}:retry:${attempt}`);
+  // Commit the endpoint exactly once, before the flight starts. It depends only
+  // on this round's RNG seed and is never rerolled after inspecting any wager.
+  const crashMultiplier = createFlightCrash(rng.seed);
   const initialFlightBets: ServerFlightBet[] = input.selections.map((selection) => ({
     id: selection.id as FlightBetId,
     amount: selection.amount,
@@ -367,12 +371,12 @@ export async function startFlightRound(input: { userId: string; requestId: strin
     await GameSession.updateOne({ sessionId: gameSession.sessionId }, { $set: { activeRoundId: rng.roundId, lastSeenAt: startedAt } }, { session });
   });
 
-  const created = await GameRound.findOne({ userId: input.userId, gameId, requestId: input.requestId }).lean();
+  const created = await GameRound.findOne({ userId: input.userId, gameId, requestId: input.requestId }).select("+crashMultiplier").lean();
   if (!created) throw new ApiError("The flight could not be launched.", 500, "ROUND_CREATE_FAILED");
   return { round: serializeActiveFlight(created as unknown as Record<string, unknown>), duplicate: id(created.roundId) !== rng.roundId };
 }
 
-export async function settleFlightRound(userId: string, roundId: string, cashout: boolean, betId?: FlightBetId, requestedAt = Date.now()) {
+export async function settleFlightRound(userId: string, roundId: string, cashout: boolean, betId?: FlightBetId, requestedAt = Date.now(), capturedMultiplier?: number) {
   const gameId = "flight-x" as const;
   // A cash-out is judged at server request arrival, not after wallet/database
   // work completes. This prevents transaction latency from turning an on-time
@@ -383,9 +387,8 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
   if (round.status !== "PLAYING") return serializeCompletedRound(round as unknown as Record<string, unknown>);
 
   const elapsed = (cashout ? cashoutRequestedAt : Date.now()) - new Date(round.startedAt).getTime();
-  const current = flightMultiplierAt(elapsed);
   const crashMultiplier = Number(round.crashMultiplier);
-  const crashed = elapsed >= flightElapsedFor(crashMultiplier) || current >= crashMultiplier;
+  const crashed = hasFlightCrashed(elapsed, crashMultiplier);
   if (!cashout && !crashed) return serializeActiveFlight(round as unknown as Record<string, unknown>);
   if (cashout && !betId) throw new ApiError("Choose the bet to cash out.", 400, "BET_REQUIRED");
 
@@ -398,13 +401,24 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
       const liveElapsed = cashoutRequestedAt - new Date(live.startedAt).getTime();
       const liveCurrent = flightMultiplierAt(liveElapsed);
       const liveCrash = Number(live.crashMultiplier);
-      if (liveElapsed >= flightElapsedFor(liveCrash) || liveCurrent >= liveCrash) return;
+      if (hasFlightCrashed(liveElapsed, liveCrash)) return;
       const bets = flightBets(live as unknown as Record<string, unknown>);
       const target = bets.find((item) => item.id === betId);
       if (!target) throw new ApiError("That flight bet was not found.", 404, "BET_NOT_FOUND");
       if (target.state !== "active") return;
-      const lockedMultiplier = Math.min(liveCrash, liveCurrent);
-      const payout = roundCredits(target.amount * lockedMultiplier);
+      const lockedMultiplier = Math.min(liveCrash, liveCurrent, capturedMultiplier ?? liveCurrent);
+      const payout = flightCashoutPayout(target.amount, lockedMultiplier);
+      const claimed = await GameRound.updateOne(
+        { roundId, status: "PLAYING", flightBets: { $elemMatch: { id: betId, state: "active" } } },
+        { $set: {
+          "flightBets.$[cashoutBet].state": "cashed_out",
+          "flightBets.$[cashoutBet].cashOutMultiplier": lockedMultiplier,
+          "flightBets.$[cashoutBet].payout": payout,
+          "flightBets.$[cashoutBet].cashOutRequestedAt": new Date(cashoutRequestedAt),
+        } },
+        { session, arrayFilters: [{ "cashoutBet.id": betId, "cashoutBet.state": "active" }] },
+      );
+      if (claimed.modifiedCount !== 1) return;
       const reward = await applyWalletChange({
         userId, amount: payout, type: "RACE_REWARD", description: `Crash cash-out at ${lockedMultiplier.toFixed(2)}x`, referenceId: roundId,
         idempotencyKey: `premium:${userId}:${gameId}:${roundId}:payout:${betId}`,
@@ -416,7 +430,7 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
       target.cashOutRequestedAt = new Date(cashoutRequestedAt);
       const totalPayout = roundCredits(bets.reduce((sum, item) => sum + item.payout, 0));
       await GameRound.updateOne({ roundId, status: "PLAYING" }, { $set: {
-        flightBets: bets, payout: totalPayout, net: totalPayout - Number(live.totalStake), balanceAfter: Number(reward.wallet.balance),
+        payout: totalPayout, net: totalPayout - Number(live.totalStake), balanceAfter: Number(reward.wallet.balance),
       } }, { session });
     });
 
@@ -431,9 +445,8 @@ export async function settleFlightRound(userId: string, roundId: string, cashout
     const live = await GameRound.findOne({ userId, gameId, roundId, status: "PLAYING" }).select("+rngSeed +crashMultiplier").session(session).lean();
     if (!live) return;
     const liveElapsed = (cashout ? cashoutRequestedAt : Date.now()) - new Date(live.startedAt).getTime();
-    const liveCurrent = flightMultiplierAt(liveElapsed);
     const liveCrash = Number(live.crashMultiplier);
-    const liveCrashed = liveElapsed >= flightElapsedFor(liveCrash) || liveCurrent >= liveCrash;
+    const liveCrashed = hasFlightCrashed(liveElapsed, liveCrash);
     if (!liveCrashed) return;
     const bets = flightBets(live as unknown as Record<string, unknown>).map((item) => item.state === "active" ? { ...item, state: "lost" as const } : item);
     const livePayout = roundCredits(bets.reduce((sum, item) => sum + item.payout, 0));

@@ -16,6 +16,7 @@ export interface ClientHistoryItem {
 }
 
 export interface ActiveFlightRound {
+  crashMultiplier: number;
   roundId: string;
   requestId: string;
   gameId: "flight-x";
@@ -51,6 +52,7 @@ export interface CompletedPremiumRound {
   net: number;
   balance: number;
   multiplier: number;
+  selections: ClientRoundSelection[];
   winningOptions: string[];
   payload: Record<string, unknown>;
   commitment: string;
@@ -124,12 +126,12 @@ export const ServerResultService = {
     }
     throw new Error("The game server could not complete that request.");
   },
-  cashout(gameId: "flight-x", roundId: string, betId: "FLIGHT_1" | "FLIGHT_2") {
+  cashout(gameId: "flight-x", roundId: string, betId: "FLIGHT_1" | "FLIGHT_2", multiplier: number) {
     return fetch(`/api/premium-games/${gameId}`, {
       method: "POST",
       credentials: "same-origin",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "cashout", roundId, betId }),
+      body: JSON.stringify({ action: "cashout", roundId, betId, multiplier }),
     }).then(json<{ round: CompletedPremiumRound | ActiveFlightRound }>);
   },
 };

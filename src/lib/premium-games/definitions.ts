@@ -154,17 +154,14 @@ export const premiumGameDefinitions: Record<PremiumGameId, PremiumGameDefinition
     options: [
       { id: "RED", label: "RED", payout: "1.95× return", tone: "red" },
       { id: "BLACK", label: "BLACK", payout: "1.95× return", tone: "black" },
-      { id: "PAIR", label: "PAIR", payout: "4× return", tone: "gold" },
-      { id: "HIGH_CARD", label: "HIGH CARD", payout: "1.4× return", tone: "cyan" },
-      { id: "STRAIGHT", label: "STRAIGHT", payout: "8× return", tone: "violet" },
-      { id: "FLUSH", label: "FLUSH", payout: "6× return", tone: "green" },
     ],
     rules: [
+      "Choose exactly one kingdom per round: Red or Black. Choosing the other kingdom replaces the conflicting wager.",
       "Red Kingdom and Black Kingdom each receive three cards.",
       "Hand rank decides the duel: straight flush, three of a kind, straight, flush, pair, then high card.",
-      "Side selections win when either kingdom reveals the selected hand type.",
+      "The winning kingdom returns 1.95× the stake. A tied duel returns the original stake.",
     ],
-    probabilityNote: "Very Hard mode targets 10% winning rounds and 90% losing rounds against the placed selections. Every candidate duel still uses one server-shuffled 52-card deck; tied Red or Black selections push.",
+    probabilityNote: "Every duel is resolved directly from one server-shuffled 52-card deck. Results are not searched or changed after a selection is placed; tied Red or Black wagers push.",
   },
   "sic-bo": {
     id: "sic-bo",

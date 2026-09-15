@@ -60,7 +60,9 @@ function shoot(state: MatchState, input: Shot, now: number) {
   const before = state.balls;
   const result = simulateShot(before, input);
   state.balls = result.balls;
-  state.trace = { id: randomUUID(), at: now + 250, input, frames: result.frames, sounds: result.sounds, duration: result.duration };
+  // Start after simulation/serialization work, so slower servers and complex
+  // multi-ball shots never deliver a trace whose opening frames already elapsed.
+  state.trace = { id: randomUUID(), at: Math.max(now, Date.now()) + 250, input, frames: result.frames, sounds: result.sounds, duration: result.duration };
   resolveShot(state, before, result.report);
   state.readyAt = state.trace.at + result.duration + 550;
   state.deadline = state.readyAt + 35000;

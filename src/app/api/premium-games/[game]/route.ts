@@ -24,6 +24,7 @@ const cashoutSchema = z.object({
   action: z.literal("cashout"),
   roundId: z.string().trim().min(20).max(160).regex(/^[a-zA-Z0-9:_-]+$/),
   betId: z.enum(["FLIGHT_1", "FLIGHT_2"]),
+  multiplier: z.number().finite().min(1).optional(),
 });
 const actionSchema = z.discriminatedUnion("action", [playSchema, cashoutSchema]);
 
@@ -70,7 +71,7 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
 
     if (input.action === "cashout") {
       if (gameId !== "flight-x") throw new ApiError("Cash out is only available in Crash.", 400, "ACTION_NOT_SUPPORTED");
-      return noStoreJson({ round: await settleFlightRound(user.userId, input.roundId, true, input.betId, requestReceivedAt) });
+      return noStoreJson({ round: await settleFlightRound(user.userId, input.roundId, true, input.betId, requestReceivedAt, input.multiplier) });
     }
 
     const definition = premiumGame(gameId);
@@ -82,6 +83,9 @@ export async function POST(request: Request, context: { params: Promise<{ game: 
     const flightSelection = (id: string) => gameId === "flight-x" && ["FLIGHT_1", "FLIGHT_2"].includes(id);
     if (duplicateSelection || input.selections.some((selection) => (!allowed.has(selection.id) && !flightSelection(selection.id)) || selection.amount % chipStep !== 0)) {
       throw new ApiError("One or more bet selections are not available.", 400, "INVALID_SELECTION");
+    }
+    if (gameId === "red-vs-black" && (input.selections.length !== 1 || !["RED", "BLACK"].includes(input.selections[0].id))) {
+      throw new ApiError("Choose exactly one kingdom: Red or Black.", 400, "CONFLICTING_SELECTIONS");
     }
     if (totalStake < setting.minStake || totalStake > setting.maxStake) {
       throw new ApiError(`Total stake must be between ${setting.minStake} and ${setting.maxStake} credits.`, 400, "INVALID_STAKE");

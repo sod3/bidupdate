@@ -90,14 +90,25 @@ function cardView(card: Card) {
 }
 
 function handScore(cards: readonly Card[]) {
-  const ranks = cards.map((card) => card.rank).sort((a, b) => b - a);
+  // Aces rank high in every ordinary hand, but remain low in A-2-3 straights.
+  // The previous implementation treated an ace as rank 1 for every tie-break,
+  // causing hands such as A-K-9 to lose incorrectly to K-Q-J.
+  const ranks = cards.map((card) => card.rank === 1 ? 14 : card.rank).sort((a, b) => b - a);
   const groups = [...new Set(ranks)].map((rank) => ({ rank, count: ranks.filter((value) => value === rank).length })).sort((a, b) => b.count - a.count || b.rank - a.rank);
   const flush = cards.every((card) => card.suit === cards[0].suit);
-  const normalized = ranks.includes(13) && ranks.includes(1) && ranks.includes(2) ? [3, 2, 1] : ranks;
+  const normalized = ranks.includes(14) && ranks.includes(3) && ranks.includes(2) ? [3, 2, 1] : ranks;
   const straight = new Set(normalized).size === 3 && normalized[0] - normalized[2] === 2;
   const category = straight && flush ? 5 : groups[0].count === 3 ? 4 : straight ? 3 : flush ? 2 : groups[0].count === 2 ? 1 : 0;
   const label = ["HIGH CARD", "PAIR", "FLUSH", "STRAIGHT", "TRIPLE", "STRAIGHT FLUSH"][category];
-  return { category, label, key: [category, ...groups.flatMap((group) => [group.count, group.rank])] };
+  const straightHigh = normalized[0];
+  const key = category === 5 || category === 3
+    ? [category, straightHigh]
+    : category === 4
+      ? [category, groups[0].rank]
+      : category === 1
+        ? [category, groups[0].rank, ...groups.slice(1).map((group) => group.rank).sort((a, b) => b - a)]
+        : [category, ...ranks];
+  return { category, label, key };
 }
 
 function compareKeys(left: readonly number[], right: readonly number[]) {
@@ -121,11 +132,6 @@ function cardDuel(rng: RNGService, selections: readonly RoundSelection[]) {
     winning.set("RED", 1);
     winning.set("BLACK", 1);
   }
-  const types = new Set([redScore.label, blackScore.label]);
-  if (types.has("PAIR")) winning.set("PAIR", 4);
-  if (types.has("HIGH CARD")) winning.set("HIGH_CARD", 1.4);
-  if (types.has("STRAIGHT") || types.has("STRAIGHT FLUSH")) winning.set("STRAIGHT", 8);
-  if (types.has("FLUSH") || types.has("STRAIGHT FLUSH")) winning.set("FLUSH", 6);
   return settle(selections, winning, winner === "TIE" ? "ROYAL DRAW" : `${winner} KINGDOM WINS`, {
     red: red.map(cardView), black: black.map(cardView), redHand: redScore.label, blackHand: blackScore.label, winner,
   });
@@ -256,6 +262,9 @@ function withVeryHardMetadata(outcome: PremiumRoundOutcome, requestedResult: "WI
  */
 export function createPremiumOutcome(gameId: PremiumGameId, seed: string, selections: readonly RoundSelection[]) {
   if (gameId === "flight-x") throw new Error("Flight X uses its committed live-round flow.");
+  // Red vs Black is a direct, auditable card duel. Never search alternate
+  // shuffled decks after seeing the player's selected kingdom.
+  if (gameId === "red-vs-black") return createNaturalPremiumOutcome(gameId, seed, selections);
   const targetWin = new RNGService(`${seed}:${VERY_HARD_DIFFICULTY_VERSION}:target`).int(100) < PREMIUM_TARGET_WIN_PERCENT;
   const requestedResult = targetWin ? "WIN" as const : "LOSS" as const;
   let closest: PremiumRoundOutcome | null = null;
@@ -281,18 +290,17 @@ export function createFlightCrash(seed: string) {
   return credits(multiplier);
 }
 
-export function flightMultiplierAt(elapsedMs: number) {
-  return credits(Math.exp(Math.max(0, elapsedMs) / 5500));
-}
+export { flightMultiplierAt, flightElapsedFor, hasFlightCrashed } from "./flightState";
 
-export function flightElapsedFor(multiplier: number) {
-  return Math.max(0, Math.log(Math.max(1, multiplier)) * 5500);
+export function flightCashoutPayout(stake: number, multiplier: number) {
+  return credits(Math.max(0, stake) * Math.max(1, multiplier));
 }
 
 export function validateSelections(gameId: PremiumGameId, selections: readonly RoundSelection[]) {
   const game = premiumGame(gameId);
   const allowed = new Set(game.options.map((option) => option.id));
   if (!selections.length || selections.some((item) => !allowed.has(item.id) || !Number.isInteger(item.amount) || !game.chips.includes(item.amount))) return false;
+  if (gameId === "red-vs-black" && (selections.length !== 1 || !["RED", "BLACK"].includes(selections[0].id))) return false;
   const stake = totalStake(selections);
   return stake >= game.minStake && stake <= game.maxStake;
 }

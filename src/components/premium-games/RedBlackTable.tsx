@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientHistoryItem, CompletedPremiumRound } from "@/lib/premium-games/client";
 import type { PremiumBetOption, PremiumGameDefinition } from "@/lib/premium-games/definitions";
-import type { RedBlackCard, RedBlackLivePhase } from "@/lib/premium-games/redBlackLive";
+import { createRedBlackTablePlayers, mergeRedBlackRecentResults, redBlackResultFromHistoryItem, redBlackResultFromRound, shouldRevealRedBlackCard, type RedBlackCard, type RedBlackLivePhase, type RedBlackRecentResult, type RedBlackTablePlayer } from "@/lib/premium-games/redBlackLive";
 
 interface FlightChip {
   id: number;
@@ -19,22 +19,32 @@ interface FlightChip {
   user?: boolean;
 }
 
+interface TableWager {
+  side: "RED" | "BLACK";
+  amount: number;
+}
+
 const referenceChips = [20, 100, 200, 1000, 2000, 5000] as const;
 const botSeats = [
   { x: 16, y: 28 }, { x: 16, y: 51 }, { x: 16, y: 73 },
   { x: 87, y: 29 }, { x: 87, y: 52 }, { x: 87, y: 74 },
 ] as const;
+const startingPlayers = createRedBlackTablePlayers(() => .5);
+const rosterStorageKey = "red-black-table-roster";
 
 function compactCredits(value: number) {
-  if (value >= 1000) return `${value / 1000}K`;
-  return String(value);
+  return value.toLocaleString("en-PK", { maximumFractionDigits: 2 });
 }
 
-function LivePlayingCard({ card, reveal, side }: { card?: RedBlackCard; reveal: boolean; side: "BLACK" | "RED" }) {
-  return <div className={`premium-playing-card rb-live-card ${reveal ? "revealed" : ""}`} data-side={side}>
+function LivePlayingCard({ card, reveal, side, dealIndex }: { card?: RedBlackCard; reveal: boolean; side: "BLACK" | "RED"; dealIndex: number }) {
+  return <div className={`premium-playing-card rb-live-card ${reveal ? "revealed" : ""}`} data-side={side} style={{
+    "--deal-index": dealIndex,
+    "--deal-delay": `${dealIndex * .09}s`,
+    "--return-delay": `${(5 - dealIndex) * .035}s`,
+  } as React.CSSProperties}>
     <div className="premium-card-inner">
-      <div className="premium-card-back" />
-      <div className="premium-card-front" data-color={card?.color ?? side}>
+      <div className="premium-card-back" aria-label="Face-down card" />
+      <div className="premium-card-front" aria-hidden={!reveal} data-color={card?.color ?? side}>
         <b>{card?.label ?? "A"}</b><span>{card?.suit ?? (side === "RED" ? "♥" : "♠")}</span><small>{card?.label ?? "A"}</small>
       </div>
     </div>
@@ -44,17 +54,17 @@ function LivePlayingCard({ card, reveal, side }: { card?: RedBlackCard; reveal: 
 function ExactDuelCards({ round, phase, revealStep }: { round: CompletedPremiumRound | null; phase: RedBlackLivePhase; revealStep: number }) {
   const black = Array.isArray(round?.payload.black) ? round.payload.black as RedBlackCard[] : [];
   const red = Array.isArray(round?.payload.red) ? round.payload.red as RedBlackCard[] : [];
-  const forceReveal = phase === "RESULT" || phase === "PAYOUT" || phase === "ROUND_END";
   return <div className="rb-live-card-row" aria-label="Black and Red hands">
-    <div className="black-hand">{[0, 1, 2].map((index) => <LivePlayingCard key={`black:${index}`} card={black[index]} side="BLACK" reveal={forceReveal || revealStep >= index * 2 + 1} />)}</div>
+    <div className="black-hand">{[0, 1, 2].map((index) => <LivePlayingCard key={`black:${index}`} card={black[index]} side="BLACK" dealIndex={index} reveal={shouldRevealRedBlackCard("BLACK", index, phase, revealStep)} />)}</div>
     <div className="rb-live-card-vs" aria-hidden="true" />
-    <div className="red-hand">{[0, 1, 2].map((index) => <LivePlayingCard key={`red:${index}`} card={red[index]} side="RED" reveal={forceReveal || revealStep >= index * 2 + 2} />)}</div>
+    <div className="red-hand">{[0, 1, 2].map((index) => <LivePlayingCard key={`red:${index}`} card={red[index]} side="RED" dealIndex={index + 3} reveal={shouldRevealRedBlackCard("RED", index, phase, revealStep)} />)}</div>
   </div>;
 }
 
-function ExactBetButton({ option, amount, disabled, winning, onSelect }: {
+function ExactBetButton({ option, amount, total, disabled, winning, onSelect }: {
   option: PremiumBetOption;
   amount: number;
+  total: number;
   disabled: boolean;
   winning: boolean;
   onSelect: (option: PremiumBetOption) => void;
@@ -68,14 +78,19 @@ function ExactBetButton({ option, amount, disabled, winning, onSelect }: {
     disabled={disabled}
     onClick={() => onSelect(option)}
     aria-label={`${option.label}, ${option.payout}. Your bet: ${amount} credits`}
+    aria-pressed={amount > 0}
   >
+    <span className="rb-pot-total">● {compactCredits(total)}</span>
+    <strong className="rb-kingdom-label">{option.id}</strong>
+    <small className="rb-personal-stake">YOU · {compactCredits(amount)} CR</small>
+    <span className="rb-table-chip-pile" aria-hidden="true">{Array.from({ length: Math.min(35, Math.ceil(total / 150)) }, (_, index) => <i key={index} style={{ left: `${8 + (index * 23 % 77)}%`, top: `${28 + (index * 17 % 45)}%`, "--chip-color": ["#823254", "#692bab", "#b47c13", "#20805c"][index % 4] } as React.CSSProperties}><b>{[20, 100, 200, "1K"][index % 4]}</b></i>)}</span>
     {amount > 0 && <span className="rb-exact-user-chip"><b>{compactCredits(amount)}</b></span>}
   </button>;
 }
 
 export function RedBlackTable({
-  game, balance, username, phase, countdown, revealStep, round, bets, selectedChip,
-  disabled, muted, onToggleMuted, onRules, onSelect, onChooseChip, onRepeat,
+  game, balance, username, stake, history, phase, countdown, revealStep, round, bets, selectedChip,
+  disabled, muted, connectionLabel, onToggleMuted, onRules, onSelect, onChooseChip, onRepeat,
 }: {
   game: PremiumGameDefinition;
   artwork: string;
@@ -95,6 +110,7 @@ export function RedBlackTable({
   busy: boolean;
   minStake: number;
   muted: boolean;
+  connectionLabel?: string | null;
   onToggleMuted: () => void;
   onRules: () => void;
   onHistory: () => void;
@@ -105,36 +121,110 @@ export function RedBlackTable({
   onDouble: () => void;
 }) {
   const [flightChips, setFlightChips] = useState<FlightChip[]>([]);
+  const [tableWagers, setTableWagers] = useState<Array<TableWager | null>>(() => Array.from({ length: 6 }, () => null));
+  const [tablePlayers, setTablePlayers] = useState<RedBlackTablePlayer[]>(startingPlayers);
+  const [recentResults, setRecentResults] = useState<RedBlackRecentResult[]>(() => history.map((item) => ({
+    roundId: item.roundId,
+    result: redBlackResultFromHistoryItem(item),
+    completedAt: item.createdAt,
+  })).slice(0, 18));
   const flightId = useRef(1);
   const countdownRef = useRef(countdown);
   const previousBets = useRef<Map<string, number>>(new Map());
+  const wagersRef = useRef(tableWagers);
+  const playersRef = useRef(tablePlayers);
+  const settledRound = useRef<string | null>(null);
+  const cleanupTimers = useRef<Set<number>>(new Set());
+  useEffect(() => { playersRef.current = tablePlayers; }, [tablePlayers]);
+  useEffect(() => () => { cleanupTimers.current.forEach(window.clearTimeout); }, []);
+  const retireChip = (id: number) => {
+    const timer = window.setTimeout(() => {
+      cleanupTimers.current.delete(timer);
+      setFlightChips((current) => current.filter((item) => item.id !== id));
+    }, 760);
+    cleanupTimers.current.add(timer);
+  };
 
   useEffect(() => { countdownRef.current = countdown; }, [countdown]);
+
+  useEffect(() => {
+    // Refresh the virtual table roster once per page entry, not every round.
+    const timer = window.setTimeout(() => {
+      let previousNames: string[] = [];
+      try {
+        const stored = window.sessionStorage.getItem(rosterStorageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) previousNames = parsed.filter((name): name is string => typeof name === "string");
+        }
+      } catch {
+        // A blocked or malformed session store should never prevent the table loading.
+      }
+      const players = createRedBlackTablePlayers(Math.random, previousNames);
+      setTablePlayers(players);
+      try {
+        window.sessionStorage.setItem(rosterStorageKey, JSON.stringify(players.map((player) => player.name)));
+      } catch {
+        // The generated in-memory roster is still valid when storage is unavailable.
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const serverResults = history.map((item) => ({
+      roundId: item.roundId,
+      result: redBlackResultFromHistoryItem(item),
+      completedAt: item.createdAt,
+    }));
+    const timer = window.setTimeout(() => setRecentResults((current) => mergeRedBlackRecentResults(current, serverResults)), 0);
+    return () => window.clearTimeout(timer);
+  }, [history]);
+
+  useEffect(() => {
+    if (phase !== "RESULT" || !round) return;
+    const timer = window.setTimeout(() => setRecentResults((current) => mergeRedBlackRecentResults(current, [{
+        roundId: round.roundId,
+        result: redBlackResultFromRound(round),
+        completedAt: round.completedAt,
+      }])), 0);
+    return () => window.clearTimeout(timer);
+  }, [phase, round]);
 
   useEffect(() => {
     if (phase !== "BETTING") return;
     let live = true;
     let timer = 0;
+    const resetTimer = window.setTimeout(() => {
+      wagersRef.current = Array.from({ length: 6 }, () => null);
+      setTableWagers(wagersRef.current);
+    }, 0);
     const placeBotBet = () => {
-      if (!live || countdownRef.current <= 1) return;
-      const seat = botSeats[Math.floor(Math.random() * botSeats.length)];
-      const side = Math.random() > .5 ? "RED" as const : "BLACK" as const;
+      if (!live) return;
+      if (countdownRef.current <= 1) { timer = window.setTimeout(placeBotBet, 250); return; }
+      const seatIndex = Math.floor(Math.random() * botSeats.length);
+      const seat = botSeats[seatIndex];
+      const previous = wagersRef.current[seatIndex];
+      const side = previous?.side ?? (Math.random() > .5 ? "RED" as const : "BLACK" as const);
       const chipIndex = Math.floor(Math.random() * referenceChips.length);
-      const value = referenceChips[chipIndex];
+      const value = Math.min(referenceChips[chipIndex], Math.max(0, Math.min(5000, playersRef.current[seatIndex].balance) - (previous?.amount ?? 0)));
+      if (value <= 0) { timer = window.setTimeout(placeBotBet, 500); return; }
       const targetX = side === "BLACK" ? 34 + Math.random() * 15 : 54 + Math.random() * 17;
-      const targetY = 35 + Math.random() * 26;
+      const targetY = 35 + Math.random() * 12;
       const chip: FlightChip = {
         id: flightId.current++, value, chipIndex, side,
         fromX: seat.x, fromY: seat.y,
         deltaX: targetX - seat.x, deltaY: targetY - seat.y,
         rotation: 520 + Math.floor(Math.random() * 650),
       };
+      wagersRef.current = wagersRef.current.map((wager, index) => index !== seatIndex ? wager : { side, amount: (previous?.amount ?? 0) + value });
+      setTableWagers(wagersRef.current);
       setFlightChips((current) => [...current.slice(-11), chip]);
-      window.setTimeout(() => setFlightChips((current) => current.filter((item) => item.id !== chip.id)), 760);
+      retireChip(chip.id);
       timer = window.setTimeout(placeBotBet, 300 + Math.random() * 520);
     };
     timer = window.setTimeout(placeBotBet, 250);
-    return () => { live = false; window.clearTimeout(timer); };
+    return () => { live = false; window.clearTimeout(resetTimer); window.clearTimeout(timer); };
   }, [phase]);
 
   useEffect(() => {
@@ -156,20 +246,44 @@ export function RedBlackTable({
         rotation: 720, user: true,
       };
       setFlightChips((current) => [...current.slice(-11), chip]);
-      window.setTimeout(() => setFlightChips((current) => current.filter((item) => item.id !== chip.id)), 760);
+      retireChip(chip.id);
     }
     previousBets.current = new Map(bets);
   }, [bets, phase, selectedChip]);
 
+  useEffect(() => {
+    if (phase !== "PAYOUT" || !round || settledRound.current === round.roundId) return;
+    settledRound.current = round.roundId;
+    const timer = window.setTimeout(() => setTablePlayers((players) => players.map((player, index) => {
+      const wager = wagersRef.current[index];
+      if (!wager) return player;
+      const payout = round.payload.winner === "TIE" ? wager.amount : round.payload.winner === wager.side ? Math.round(wager.amount * 195) / 100 : 0;
+      return { ...player, balance: Math.round((player.balance - wager.amount + payout) * 100) / 100 };
+    })), 0);
+    return () => window.clearTimeout(timer);
+  }, [phase, round]);
+
   const options = useMemo(() => new Map(game.options.map((option) => [option.id, option])), [game.options]);
   const outcomeVisible = phase === "RESULT" || phase === "PAYOUT" || phase === "ROUND_END";
   const winningOptions = new Set(outcomeVisible ? round?.winningOptions ?? [] : []);
-  const betOptions = ["BLACK", "RED", "PAIR", "HIGH_CARD", "STRAIGHT", "FLUSH"].map((id) => options.get(id)).filter((option): option is PremiumBetOption => !!option);
+  const betOptions = ["BLACK", "RED"].map((id) => options.get(id)).filter((option): option is PremiumBetOption => !!option);
   const winner = String(round?.payload.winner ?? "TIE");
+  const activeSide = bets.has("BLACK") ? "BLACK" : bets.has("RED") ? "RED" : null;
+  const revealingSide = phase === "REVEALING" ? (revealStep <= 3 ? "BLACK" : "RED") : null;
+  const visibleTableWagers = phase === "NEXT_ROUND" || phase === "COUNTDOWN" ? Array.from({ length: 6 }, () => null) : tableWagers;
+  const resultHistory = recentResults.map((item) => item.result);
+  const settlement = !round || round.totalStake <= 0
+    ? null
+    : round.result === "WIN"
+      ? `PAYOUT ${round.payout.toLocaleString("en-PK", { maximumFractionDigits: 2 })} CR · PROFIT ${round.net.toLocaleString("en-PK", { maximumFractionDigits: 2 })} CR`
+      : round.result === "PUSH"
+        ? `DRAW · ${round.totalStake.toLocaleString("en-PK", { maximumFractionDigits: 2 })} CR RETURNED`
+        : `LOST ${round.totalStake.toLocaleString("en-PK", { maximumFractionDigits: 2 })} CR`;
   const timerValue = phase === "BETTING" ? Math.max(0, countdown) : phase === "COUNTDOWN" ? countdown : phase === "REVEALING" ? revealStep : 0;
 
   return <main className={`rb-game rb-live-table rb-exact-table phase-${phase.toLocaleLowerCase()}`} data-winner={winner}>
     <div className="rb-exact-reference" aria-hidden="true" />
+    <div className="rb-live-felt" aria-hidden="true" />
     <div className="rb-social-cover" aria-hidden="true" />
 
     <section className="rb-exact-user-profile" aria-label={`${username || "Player"}, balance ${balance.toLocaleString("en-PK", { maximumFractionDigits: 2 })}`}>
@@ -202,9 +316,33 @@ export function RedBlackTable({
       <ExactDuelCards round={round} phase={phase} revealStep={revealStep} />
     </section>
 
+    <div className="rb-exact-history" aria-label="Recent Red vs Black results">
+      {Array.from({ length: 18 }, (_, index) => <i key={index} data-result={resultHistory[index]}>{resultHistory[index] === "TIE" ? "T" : ""}</i>)}
+    </div>
+
+    <div className="rb-exact-table-players" aria-label="Virtual table players and wagers">
+      {tablePlayers.map((player, index) => {
+        const wager = visibleTableWagers[index];
+        const column = player.avatar % 4;
+        const row = Math.floor(player.avatar / 4);
+        return <div key={index} data-seat={index} data-side={wager?.side}>
+          <span style={{ backgroundPosition: `${column * 33.333}% ${row * 100}%` }} />
+          <section><b>{player.name}</b><small>● {compactCredits(Math.max(0, player.balance - (wager && phase !== "PAYOUT" && phase !== "ROUND_END" ? wager.amount : 0)))}</small><em>{wager ? `${wager.side} · ${compactCredits(wager.amount)}` : "NO BET"}</em></section>
+        </div>;
+      })}
+    </div>
+
     <section className="rb-exact-bet-layer" aria-label="Red vs Black betting table">
-      {betOptions.map((option) => <ExactBetButton key={option.id} option={option} amount={bets.get(option.id) ?? 0} disabled={disabled} winning={winningOptions.has(option.id)} onSelect={onSelect} />)}
+      {betOptions.map((option) => <ExactBetButton key={option.id} option={option} amount={bets.get(option.id) ?? 0} total={(bets.get(option.id) ?? 0) + visibleTableWagers.reduce((sum, wager) => sum + (wager?.side === option.id ? wager.amount : 0), 0)} disabled={disabled} winning={winningOptions.has(option.id)} onSelect={onSelect} />)}
     </section>
+
+    <div className="rb-table-rules">Choose BLACK or RED · Winner returns 1.95× · Draw returns your stake</div>
+
+    <div className="rb-exact-active-selection" data-side={revealingSide ?? activeSide ?? undefined} aria-live="polite">
+      <small>{revealingSide ? "REVEALING" : phase === "BETTING" ? "YOUR SELECTION" : "YOUR BET"}</small>
+      <strong>{revealingSide ?? activeSide ?? (phase === "BETTING" ? "CHOOSE A SIDE" : "NO BET")}</strong>
+      {activeSide && <span>{compactCredits(stake)} CR{phase !== "BETTING" ? " · LOCKED" : ""}</span>}
+    </div>
 
     <div className="rb-exact-timer" data-phase={phase} role="timer" aria-label={`Round timer ${timerValue}`}><b>{timerValue}</b></div>
 
@@ -233,10 +371,13 @@ export function RedBlackTable({
     {phase === "RESULT" && round && <div className="rb-exact-result" data-winner={winner} aria-live="assertive">
       <strong>{winner === "RED" ? "Red Wins!" : winner === "BLACK" ? "Black Wins!" : "Tie!"}</strong>
       <span>{String(round.payload.blackHand ?? "High")} <b>VS</b> {String(round.payload.redHand ?? "High")}</span>
+      {settlement && <em data-result={round.result}>{settlement}</em>}
     </div>}
 
-    {phase === "PAYOUT" && <div className="rb-live-payout" data-winner={winner} aria-hidden="true">
+    {phase === "PAYOUT" && round?.result === "WIN" && round.totalStake > 0 && <div className="rb-live-payout" data-winner={winner} data-user-win="true" aria-hidden="true">
       {Array.from({ length: 18 }, (_, index) => <i key={index} style={{ "--pay-index": index, "--pay-x": `${((index * 47) % 76) - 38}vw`, "--pay-y": `${-18 - (index % 5) * 7}vh` } as React.CSSProperties} />)}
     </div>}
+
+    {connectionLabel && <div className="rb-live-connecting" role="status">{connectionLabel}</div>}
   </main>;
 }

@@ -86,13 +86,17 @@ function nearPocketOpening(ball: PoolBallState, axis: "x" | "z") {
   return Math.abs(Math.abs(ball.x) - TABLE_HALF_WIDTH) < .19;
 }
 
-export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): PhysicsEvents {
-  const events: PhysicsEvents = { collisions: [], railHits: [], pocketed: [] };
+export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number, reusableEvents?: PhysicsEvents): PhysicsEvents {
+  const events: PhysicsEvents = reusableEvents ?? { collisions: [], railHits: [], pocketed: [] };
+  events.collisions.length = 0;
+  events.railHits.length = 0;
+  events.pocketed.length = 0;
   const dt = Math.min(.018, Math.max(.001, deltaSeconds));
   for (const ball of balls) {
     if (ball.pocketed) continue;
-    const speed = Math.hypot(ball.vx, ball.vz);
-    if (speed > .002) {
+    const speedSquared = ball.vx * ball.vx + ball.vz * ball.vz;
+    if (speedSquared > .000004) {
+      const speed = Math.sqrt(speedSquared);
       const curve = ball.sideSpin * .34 * dt * Math.min(1, speed / 2.2);
       const cosine = Math.cos(curve);
       const sine = Math.sin(curve);
@@ -111,13 +115,17 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): P
       ball.vz *= drag;
       ball.sideSpin *= Math.max(0, 1 - 1.35 * dt);
       ball.topSpin *= Math.max(0, 1 - 1.7 * dt);
-      if (Math.hypot(ball.vx, ball.vz) < .018) {
+      if (ball.vx * ball.vx + ball.vz * ball.vz < .000324) {
         ball.vx = 0;
         ball.vz = 0;
       }
     }
 
-    const pocket = POCKETS.find((item) => Math.hypot(ball.x - item.x, ball.z - item.z) < item.radius);
+    const pocket = POCKETS.find((item) => {
+      const dx = ball.x - item.x;
+      const dz = ball.z - item.z;
+      return dx * dx + dz * dz < item.radius * item.radius;
+    });
     if (pocket) {
       ball.pocketed = true;
       ball.vx = 0;
@@ -150,9 +158,12 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): P
       if (right.pocketed) continue;
       const dx = right.x - left.x;
       const dz = right.z - left.z;
-      const distance = Math.hypot(dx, dz);
       const minimum = BALL_RADIUS * 2;
-      if (distance >= minimum) continue;
+      // Most pairs are far apart. This cheap axis test avoids a square root for them.
+      if (Math.abs(dx) >= minimum || Math.abs(dz) >= minimum) continue;
+      const distanceSquared = dx * dx + dz * dz;
+      if (distanceSquared >= minimum * minimum) continue;
+      const distance = Math.sqrt(distanceSquared);
       const nx = distance > 1e-8 ? dx / distance : 1;
       const nz = distance > 1e-8 ? dz / distance : 0;
       const overlap = minimum - distance;
@@ -183,7 +194,7 @@ export function stepPoolPhysics(balls: PoolBallState[], deltaSeconds: number): P
 }
 
 export function ballsAreMoving(balls: PoolBallState[]) {
-  return balls.some((ball) => !ball.pocketed && Math.hypot(ball.vx, ball.vz) > .02);
+  return balls.some((ball) => !ball.pocketed && ball.vx * ball.vx + ball.vz * ball.vz > .0004);
 }
 
 export function strikeCueBall(balls: PoolBallState[], angle: number, power: number, spin: SpinInput) {

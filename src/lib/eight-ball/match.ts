@@ -47,6 +47,7 @@ export function resolveShot(state: MatchState, before: PoolBallState[], report: 
 export function simulateShot(source: PoolBallState[], input: Shot, capture = true) {
   if (![input.angle, input.power, input.spin.x, input.spin.y].every(Number.isFinite) || input.power < .05 || input.power > 1 || Math.abs(input.spin.x) > 1 || Math.abs(input.spin.y) > 1) throw new Error("Invalid shot.");
   const balls = cloneBalls(source), frames: Frame[] = [], sounds: ShotTrace["sounds"] = [{ at: 0, kind: "cue", force: 1 }];
+  const physicsEvents: ReturnType<typeof stepPoolPhysics> = { collisions: [], railHits: [], pocketed: [] };
   const report: Report = { firstHit: null, pots: [], railsAfter: [], scratch: false };
   const frame = () => balls.map(b => [b.number, +b.x.toFixed(5), +b.z.toFixed(5), b.pocketed ? 1 : 0, +b.rotationX.toFixed(3), +b.rotationZ.toFixed(3)]);
   if (capture) frames.push(frame());
@@ -54,7 +55,7 @@ export function simulateShot(source: PoolBallState[], input: Shot, capture = tru
   let step = 0;
   // Fixed 240 Hz steps prevent tunnelling at maximum break velocity.
   for (; step < 7200 && ballsAreMoving(balls); step++) {
-    const events = stepPoolPhysics(balls, 1 / 240);
+    const events = stepPoolPhysics(balls, 1 / 240, physicsEvents);
     for (const hit of events.collisions) {
       if (report.firstHit === null && (hit.a === 0 || hit.b === 0)) report.firstHit = hit.a === 0 ? hit.b : hit.a;
       if (capture && hit.force > .08) sounds.push({ at: step / 240 * 1000, kind: "collision", force: Math.min(1, hit.force / 4) });

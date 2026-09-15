@@ -130,7 +130,6 @@ export function ReconnectHandler({ onReconnect }: { onReconnect: () => void }) {
   return online ? null : <div className="premium-connection-lost"><i /><b>CONNECTION LOST</b><span>Reconnecting to the same round…</span></div>;
 }
 
-export function ResponsiveGameLayout({ children }: { children: ReactNode }) {
-  return <div className="premium-responsive-layout">{children}<div className="premium-rotate-device"><span>↻</span><b>ROTATE YOUR DEVICE</b><small>This table plays best in landscape.</small></div></div>;
+export function ResponsiveGameLayout({ children, scrollable = false }: { children: ReactNode; scrollable?: boolean }) {
+  return <div className={`premium-responsive-layout${scrollable ? " premium-scrollable-game" : ""}`}>{children}<div className="premium-rotate-device"><span>↻</span><b>ROTATE YOUR DEVICE</b><small>This table plays best in landscape.</small></div></div>;
 }
-
