@@ -44,20 +44,97 @@ export function EightBallExperience(){
   const gain=context.createGain(),o=context.createOscillator(),base=kind==="collision"?750:kind==="cue"?155:kind==="pocket"?95:kind==="victory"?530:kind==="versus"?65:kind==="rail"?240:420;
   o.type=kind==="collision"?"triangle":"sine";o.frequency.setValueAtTime(base,t);o.frequency.exponentialRampToValueAtTime(base*.43,t+.12);gain.gain.setValueAtTime(Math.max(.008,Math.min(1,force)*.12),t);gain.gain.exponentialRampToValueAtTime(.0001,t+.2);o.connect(gain).connect(context.destination);o.onended=()=>{o.disconnect();gain.disconnect();};o.start();o.stop(t+.22);
  },[]);
- const command=useCallback((input:Record<string,unknown>)=>{
-  if(!socket.current?.connected){setError("Reconnecting to your table…");return;}setBusy(true);setError("");socket.current.timeout(20000).emit("pool-live:command",input,(err:Error|null,result:{error?:string})=>{setBusy(false);if(err||result?.error)setError(result?.error??"Connection interrupted. Reconnecting preserves your table.");});
- },[]);
- useEffect(()=>{const tick=()=>setNow(Date.now()+clockOffset);tick();const timer=setInterval(tick,1000);return()=>clearInterval(timer);},[clockOffset]);
- useEffect(()=>{if(startAt===undefined||readyAt===undefined)return;const current=Date.now()+clockOffset;const next=[startAt,readyAt,readyAt+1000].filter(value=>value>current).sort((a,b)=>a-b)[0];if(next===undefined)return;const timer=setTimeout(()=>setNow(Date.now()+clockOffset),Math.max(0,next-current)+8);return()=>clearTimeout(timer);},[startAt,readyAt,clockOffset]);
- useEffect(()=>{
-  if(wallet.user.role!=="USER")return;let cancelled=false;let s:Socket|undefined;
-  const authorize=async()=>{const response=await fetch("/api/eight-ball/session",{method:"POST"});const data=await response.json();if(!response.ok)throw new Error(data.error);return data.token as string;};
-  void authorize().then(token=>{if(cancelled)return;s=io({path:"/race-socket",transports:["websocket"],auth:{token},reconnection:true});socket.current=s;
-   s.on("connect",()=>{setConnected(true);setError("");s?.emit("pool-live:command",{action:"STATUS"},()=>{});});s.on("disconnect",()=>setConnected(false));s.on("connect_error",()=>{setConnected(false);void authorize().then(token=>{if(s)s.auth={token};}).catch(()=>{});});
-   s.on("pool-live:state",(next:View)=>{setClockOffset(next.now-Date.now());setView(next);setError("");if(next.state?.id!==lastMatch.current){lastMatch.current=next.state?.id??"";angleRef.current=-.018;setPower(0);powerRef.current=0;void refreshWallet();}if(!next.state&&!next.queuedAt&&replay.current){replay.current=false;setTimeout(()=>s?.emit("pool-live:command",{action:"JOIN",stake:stakeRef.current},()=>{}),200);}});
-   s.on("pool-live:availability",()=>setError("The table is reconnecting. Your match is saved."));
-  }).catch(e=>setError(e.message));return()=>{cancelled=true;s?.disconnect();socket.current=null;};
- },[wallet.user.role,wallet.user.username,refreshWallet]);
+ const isHttpMode = useRef(false);
+ const applyView = useCallback((next: View) => {
+  setClockOffset(next.now - Date.now());
+  setView(next);
+  setError("");
+  if (next.state?.id !== lastMatch.current) {
+   lastMatch.current = next.state?.id ?? "";
+   angleRef.current = -.018;
+   setPower(0);
+   powerRef.current = 0;
+   void refreshWallet();
+  }
+  if (!next.state && !next.queuedAt && replay.current) {
+   replay.current = false;
+   setTimeout(() => {
+    void sendCommandRef.current({ action: "JOIN", stake: stakeRef.current });
+   }, 200);
+  }
+ }, [refreshWallet]);
+
+ const sendHttpCommand = useCallback(async (input: Record<string, unknown>) => {
+  setBusy(true);
+  try {
+   const res = await fetch("/api/eight-ball/live", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+   });
+   const data = await res.json();
+   if (!res.ok) throw new Error(data.error || "Connection error");
+   applyView(data as View);
+   setConnected(true);
+   setError("");
+   return data;
+  } catch (err: unknown) {
+   const message = err instanceof Error ? err.message : "Unable to reach table";
+   if (input.action !== "STATUS") setError(message);
+  } finally {
+   setBusy(false);
+  }
+ }, [applyView]);
+
+ const sendCommandRef = useRef(sendHttpCommand);
+ useEffect(() => { sendCommandRef.current = sendHttpCommand; }, [sendHttpCommand]);
+
+ const command = useCallback((input: Record<string, unknown>) => {
+  if (socket.current?.connected) {
+   setBusy(true);
+   setError("");
+   socket.current.timeout(20000).emit("pool-live:command", input, (err: Error | null, result: { error?: string }) => {
+    setBusy(false);
+    if (err || result?.error) setError(result?.error ?? "Connection interrupted. Reconnecting preserves your table.");
+   });
+  } else {
+   void sendHttpCommand(input);
+  }
+ }, [sendHttpCommand]);
+
+ useEffect(() => { const tick = () => setNow(Date.now() + clockOffset); tick(); const timer = setInterval(tick, 1000); return () => clearInterval(timer); }, [clockOffset]);
+ useEffect(() => { if (startAt === undefined || readyAt === undefined) return; const current = Date.now() + clockOffset; const next = [startAt, readyAt, readyAt + 1000].filter(value => value > current).sort((a, b) => a - b)[0]; if (next === undefined) return; const timer = setTimeout(() => setNow(Date.now() + clockOffset), Math.max(0, next - current) + 8); return () => clearTimeout(timer); }, [startAt, readyAt, clockOffset]);
+ useEffect(() => {
+  if (wallet.user.role !== "USER") return; let cancelled = false; let s: Socket | undefined;
+  const startHttpFallback = () => {
+   if (cancelled) return;
+   isHttpMode.current = true;
+   setConnected(true);
+   if (s) { s.disconnect(); s = undefined; socket.current = null; }
+   void sendHttpCommand({ action: "STATUS" });
+  };
+  const authorize = async () => { const response = await fetch("/api/eight-ball/session", { method: "POST" }); const data = await response.json(); if (!response.ok) throw new Error(data.error); return data.token as string; };
+  void authorize().then(token => {
+   if (cancelled) return; s = io({ path: "/race-socket", transports: ["websocket"], auth: { token }, reconnection: false, timeout: 3000 }); socket.current = s;
+   s.on("connect", () => { if (cancelled) return; isHttpMode.current = false; setConnected(true); setError(""); s?.emit("pool-live:command", { action: "STATUS" }, () => {}); });
+   s.on("disconnect", () => { if (!isHttpMode.current) setConnected(false); });
+   s.on("connect_error", () => { startHttpFallback(); });
+   s.on("pool-live:state", (next: View) => { if (!cancelled) applyView(next); });
+   s.on("pool-live:availability", () => setError("The table is reconnecting. Your match is saved."));
+  }).catch(() => { startHttpFallback(); });
+  return () => { cancelled = true; s?.disconnect(); socket.current = null; };
+ }, [wallet.user.role, wallet.user.username, applyView, sendHttpCommand]);
+
+ useEffect(() => {
+  if (wallet.user.role !== "USER") return;
+  const interval = (view?.queuedAt || view?.state) ? 600 : 3000;
+  const timer = setInterval(() => {
+   if (isHttpMode.current && !busy) {
+    void sendHttpCommand({ action: "STATUS" });
+   }
+  }, interval);
+  return () => clearInterval(timer);
+ }, [wallet.user.role, view?.queuedAt, view?.state, busy, sendHttpCommand]);
  useEffect(()=>{if(finished){sound(state?.winner===self?"victory":"rail",1);void refreshWallet();}},[finished,self,state?.winner,sound,refreshWallet]);
  useEffect(()=>{if(versus)sound("versus",1);},[versus,sound]);
  function play(){if(!audio.current)audio.current=new AudioContext();void audio.current.resume();sound("ui",.4);if(wallet.user.role!=="USER"){router.push("/login?next=%2Fplay%2Feight-ball");return;}command({action:"JOIN",stake});}

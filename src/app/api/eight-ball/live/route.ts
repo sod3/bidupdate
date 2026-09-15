@@ -26,6 +26,7 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     if (!["JOIN", "STATUS", "SHOT", "PLACE", "LEAVE", "CANCEL", "RESIGN"].includes(String(input.action))) throw new ApiError("Unknown table command.");
     const user = await requireUser();
+    await tickPool();
     return noStoreJson(await poolCommand(user.userId, input));
   } catch (error) { return handleRouteError(error); }
 }
